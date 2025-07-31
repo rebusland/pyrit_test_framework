@@ -1,0 +1,14 @@
+datasets:
+  - name: "harmbench_dataset"
+  - name: "sosbench_dataset"
+  - name: "forbidden_questions_dataset"
+  - name: "adv_bench_dataset"
+
+scorer:
+  "name": "self_ask_refusal"
+
+orchestrator:
+  "name": "prompt_sending"
+
+output:
+  dir: "results/one_shot_prompts"
