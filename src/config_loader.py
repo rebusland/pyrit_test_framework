@@ -4,19 +4,24 @@ from pathlib import Path
 import logging
 import os
 
+# TODO get severity level from config file
+LOG_LEVEL = logging.INFO
+
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=LOG_LEVEL,
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
 logger = logging.getLogger(__name__)
 
+# Where to save reports, conversations and so on
+OUTPUTS_DIR = "results/"
+
 ## Prepended prompts
-_PREPENDED_PROMPTS_PATH = "config/prompt_preambles/"
+_SYSTEM_PROMPTS_PATH = "config/system_prompts/"
 EXAMPLE_SAFE_PROMPT='example_safe_prompt.txt'
 CHILDREN_SAFE_PROMPT='children_safe_prompt.txt'
 VERIFICATION_PROMPT='verification_prompt.txt'
-
 
 load_dotenv()
 
@@ -57,9 +62,9 @@ TEST_CONFIG_PATH = "config/test_config.yaml"
 def load_dotenv_with_check():
     ok_dotenv = load_dotenv()  # Load .env file into environment
     if ok_dotenv:
-        logger.info('Succesfully loaded test framework .env')
+        logger.debug('Succesfully loaded test framework .env')
     else:
-        logger.info('Unable to load a .env file for the test framework')
+        logger.debug('Unable to load a .env file for the test framework')
 
 def load_openai_configs():
     load_dotenv_with_check()
@@ -87,6 +92,6 @@ def load_all_configs():
     load_openai_configs()
     return load_test_config()
 
-def load_prepended_prompt(prompt_name: str=EXAMPLE_SAFE_PROMPT):
-    with open(_PREPENDED_PROMPTS_PATH + prompt_name) as file:
+def load_system_prompt(prompt_name: str=EXAMPLE_SAFE_PROMPT):
+    with open(_SYSTEM_PROMPTS_PATH + prompt_name) as file:
         return file.read()
