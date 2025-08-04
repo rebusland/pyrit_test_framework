@@ -7,7 +7,7 @@ from pyrit.common import (
 )
 from pyrit.memory import MemoryInterface
 from pyrit.memory.central_memory import CentralMemory
-
+from pyrit.models import PromptRequestResponse
 from config_loader import OUTPUTS_DIR
 
 import pathlib
@@ -43,7 +43,15 @@ class MemoryManager:
     def dump_to_json(self):
         self._memory.export_conversations(file_path=pathlib.Path(MEMORY_RESULTS_DIR)/"conversation.json")
 
-    def dump_debug_log(self, log_name="debug.log"):
+    def dump_debug_log(self, *, log_name="debug.log", orchestrator_id=None):
+        log_file = os.path.join(MEMORY_RESULTS_DIR, log_name)
+        with open(log_file, "w", encoding="utf-8") as f:
+            element = self._memory.get_prompt_request_pieces(orchestrator_id=orchestrator_id)
+            for r in element:
+                f.write("\n" + "*"*100 + "\n")
+                f.write(str(r.to_dict()))
+
+        '''
         if not DEBUG_LOGGING:
             return
 
@@ -61,6 +69,7 @@ class MemoryManager:
                             Score Value: {s.score_value}\n
                             Score category: {s.score_category}""") #etc. etc.
                 f.write("\n")
+        '''
 
     def generate_csv_report(self, out_path="run_summary.csv"):
         '''

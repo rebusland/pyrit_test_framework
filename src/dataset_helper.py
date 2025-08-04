@@ -13,6 +13,8 @@ import pathlib
 from threading import Lock
 
 # TODO improve with singleton pattern, enums for datasets etc.
+# TODO IMPORTANT: this might be useless as pyrit fetchers already manage caching with local db
+# we might add a "cachable" flag just to handle our custom datasets, and leave pyrit manage its own caching mechanism
 class LazyLoader:
     def __init__(self, loaders):
         """

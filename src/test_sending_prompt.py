@@ -40,7 +40,7 @@ async def run_test_sending_prompts():
 
     # Load dataset and prepare prompts
     seed_prompts_dataset = load_dataset(dataset_name='harmbench')
-    seed_prompts = seed_prompts_dataset.prompts[:1] # TODO limit the number of prompts for testing!
+    seed_prompts = seed_prompts_dataset.prompts[:2] # TODO limit the number of prompts for testing!
     await memory.add_seed_prompts_to_memory_async(prompts=seed_prompts, added_by="pyrit_test_framework")
 
     peek_prompts_and_other_info(seed_prompts_dataset=seed_prompts_dataset, memory=memory)
@@ -84,12 +84,26 @@ async def run_test_sending_prompts():
         memory_labels=memory_labels
     )
 
-    logger.debug('\n\n*** Printing raw responses from target ***\n')
+    orchestrator_req_res_pieces = orchestrator.get_memory()
+    # group req/response
+    # req/response are matched by conversation_id
+    # req have role="user", responses have role="assistant" and prompt_request_response_id filled
+    logger.info(f"Orchestrator req/res history:")
+    for req_res_piece in orchestrator_req_res_pieces:
+        logger.info(f"Req/response piece:\n{req_res_piece.to_dict()}")
+    orchestrator_scores = orchestrator.get_score_memory()
+    # It's empty, I think for unproper invocation of scorer inside PromptSendingOrchestrator
+    logger.debug(f"Orchestrator scores: {orchestrator_scores}")
+    orchestrator_id = orchestrator.get_identifier()
+    logger.info(f"Orchestrator identifier: {orchestrator_id}")
+
+    logger.info('\n\n*** Printing raw responses from target ***\n')
     for resp in responses:
-        logger.debug(f"Direct response:\n {resp.__dict__}")
+        logger.info(f"Direct response:\n {resp.__dict__}")
         #memory.add_request_response_to_memory(request=resp)
 
     results = PromptRequestResponse.flatten_to_prompt_request_pieces(responses)
+    # NON NEEDED, already added by orchestrator, if trying to do so, there will indeed be primary key violation for duplicate insert (reinserting something already committed to memory)
     #memory.add_request_pieces_to_memory(request_pieces=results)
 
     # TODO replace the following with producing a report and saving results to a specified folder
