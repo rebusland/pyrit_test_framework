@@ -1,21 +1,8 @@
+from logging_handler import logger
+
 import yaml
 from dotenv import load_dotenv
-from pathlib import Path
-import logging
 import os
-
-# TODO get severity level from config file
-LOG_LEVEL = logging.INFO
-
-# Configure logging
-logging.basicConfig(
-    level=LOG_LEVEL,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
-logger = logging.getLogger(__name__)
-
-# Where to save reports, conversations and so on
-OUTPUTS_DIR = "results/"
 
 ## Prepended prompts
 _SYSTEM_PROMPTS_PATH = "config/system_prompts/"
