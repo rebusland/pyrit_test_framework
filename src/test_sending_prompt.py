@@ -18,6 +18,7 @@ from data_types import (
 from collections import defaultdict, namedtuple
 import asyncio
 from typing import Sequence
+from datetime import datetime
 
 config_loader.load_dotenv_with_check()
 config_loader.load_openai_configs()
@@ -64,18 +65,25 @@ def group_request_response(req_res_list: Sequence[PromptRequestPiece]) -> Sequen
         if pair[PromptRequestPieceType.REQUEST.value] and pair[PromptRequestPieceType.RESPONSE.value]
     ]
 
-async def run_test_sending_prompts():
+async def run_test_sending_prompts(dataset_name: str='harmbench'):
+    test_name = f"{dataset_name}_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
+    logger.info(f"\n\n**** Running test {test_name} ****")
     memory_manager = MemoryManager()
     memory = memory_manager.get_memory()
     # Configure the labels you want to send, these should be unique to this test to make it easier to retrieve
-    memory_labels = {"op_name": "new_op", "user_name": "PyRIT_test_framework", "test_name": __file__}
+    memory_labels = {
+        "op_name": "new_op",
+        "user_name": "pyrit_test_framework",
+        "dataset_name": dataset_name,
+        "test_name": test_name
+    }
 
     # Load dataset and prepare prompts
-    seed_prompts_dataset = load_dataset(dataset_name='harmbench')
+    seed_prompts_dataset = load_dataset(dataset_name=dataset_name)
     seed_prompts = seed_prompts_dataset.prompts[:2] # TODO limit the number of prompts for testing!
     for sp in seed_prompts:
         logger.debug(f"Seed prompt: {sp.__dict__}")
-
+    logger.info('Prompt dataset loaded')
     await memory.add_seed_prompts_to_memory_async(prompts=seed_prompts, added_by="pyrit_test_framework")
 
     # TODO
@@ -119,6 +127,7 @@ async def run_test_sending_prompts():
     )
     logger.debug(f"Orchestrator details: {orchestrator.__dict__}")
 
+    logger.info('Sending prompts to the target')
     prompts_metadata_for_orchestrator = {
         'dataset_name': seed_prompts_dataset.name,
         'dataset_harm_categories': seed_prompts_dataset.harm_categories
@@ -164,20 +173,22 @@ async def run_test_sending_prompts():
     # It's empty, I think for unproper invocation of scorer inside PromptSendingOrchestrator
     logger.debug(f"Orchestrator scores after scoring: {orchestrator_scores}")
 
+    logger.info('Prompt responses received, gruping requests and responses')
     # pair each response with its request, using "conversation_id" as linking key
     req_res_pairs = group_request_response(orchestrator_req_res_pieces)
     for req_res_pair in req_res_pairs:
         logger.debug(f"Request/Response pair:\n{req_res_pair}")
     
     prompt_results = [PromptResult.from_req_resp_pair(rr_pair) for rr_pair in req_res_pairs]
-    logger.info('***** Printing prompt results ******')
+    logger.debug('***** Printing prompt results ******')
     for p_res in prompt_results:
-        logger.info(p_res)
+        logger.debug(p_res)
 
-    reporting.save_prompt_results_to_csv(results=prompt_results, compact=True)
+    logger.info('Saving prompt results and producing test report')
+    reporting.save_prompt_results_to_csv(results=prompt_results, compact=True, test_name=test_name)
     #reporting.dump_debug_log(memory=memory)
     #reporting.dump_to_json(memory=memory)
-
+    logger.info(f"**** Finished test {test_name} ****")
 
 if __name__ == "__main__":
     try:

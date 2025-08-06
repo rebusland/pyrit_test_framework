@@ -20,15 +20,20 @@ FILE_PROMPT_RESULT_PREFIX='prompt_results'
 
 os.makedirs(OUTPUTS_DIR, exist_ok=True)
 
-def save_prompt_results_to_csv(*, results: Sequence[PromptResult], compact: bool=False, output_folder_path: str=OUTPUTS_DIR, test_name: str='test') -> None:
+def save_prompt_results_to_csv(
+        *,
+        results: Sequence[PromptResult],
+        compact: bool=False,
+        output_folder_path: str=OUTPUTS_DIR,
+        test_name: str=f"test_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
+    ) -> None:
     if not results:
         print("No data to write.")
         return
 
     result_mapper = PromptResult.to_dict_reduced if compact else PromptResult.to_dict_extended
     dict_rows = [result_mapper(result) for result in results]
-    date_str = datetime.now().strftime("%d%m%Y_%H%M%S")
-    file_path=f"{output_folder_path}{FILE_PROMPT_RESULT_PREFIX}_{test_name}_{date_str}.csv"
+    file_path=f"{output_folder_path}{FILE_PROMPT_RESULT_PREFIX}_{test_name}.csv"
 
     # Write to CSV
     with open(file_path, mode='w', newline='', encoding='utf-8') as csvfile:
@@ -36,6 +41,8 @@ def save_prompt_results_to_csv(*, results: Sequence[PromptResult], compact: bool
         writer.writeheader()
         writer.writerows(dict_rows)
 
+def read_results_from_csv(*, file_name: str, compact: bool=False):
+    pass
 
 def get_test_summary_report(*, results: Sequence[ReqRespPair]) -> dict:
     '''
