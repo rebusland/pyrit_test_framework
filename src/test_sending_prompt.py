@@ -1,12 +1,17 @@
-from pyrit.models import PromptRequestResponse, PromptRequestPiece
+from pyrit.models import (
+    PromptRequestResponse,
+    PromptRequestPiece,
+    Score
+)
 # from pyrit.prompt_converter.charswap_attack_converter import CharSwapGenerator
 from pyrit.prompt_target import OpenAIChatTarget
+from pyrit.score import Scorer
 
 import config_loader
 import scorer_factory
 import orchestrator_factory
 from memory_manager import MemoryManager
-from dataset_helper import load_dataset
+from dataset_helper import load_dataset, peek_dataset_info
 from logging_handler import logger
 import reporting
 from data_types import (
@@ -22,19 +27,6 @@ from datetime import datetime
 
 config_loader.load_dotenv_with_check()
 config_loader.load_openai_configs()
-
-def peek_prompts_and_other_info(seed_prompts_dataset, memory):
-    logger.debug(f"Dataset description: {seed_prompts_dataset.description}")
-    logger.debug(f"Dataset name: {seed_prompts_dataset.dataset_name}")
-    logger.debug(f"Dataset data type: {seed_prompts_dataset.data_type}")
-    logger.debug(f"Dataset authors:' + {seed_prompts_dataset.authors}")
-    logger.debug(f"Dataset harm categories: {seed_prompts_dataset.harm_categories}")
-    logger.debug(f"Seed prompts: {seed_prompts_dataset.get_values()}")
-
-    logger.debug(f"Prompt groups: {seed_prompts_dataset.groups}")
-    logger.debug(f"Prompt seed groups loaded in memory: {memory.get_seed_prompt_groups()}")
-    for g in memory.get_seed_prompt_groups():
-        logger.debug(str(g.prompts))
 
 def get_prompt_request_piece_type(prompt_req_piece: PromptRequestPiece) -> PromptRequestPieceType:
     '''
@@ -65,6 +57,21 @@ def group_request_response(req_res_list: Sequence[PromptRequestPiece]) -> Sequen
         if pair[PromptRequestPieceType.REQUEST.value] and pair[PromptRequestPieceType.RESPONSE.value]
     ]
 
+async def score_results(scorer: Scorer, responses: Sequence[PromptRequestPiece]) -> Sequence[Score]:
+    score_results = await scorer.score_responses_inferring_tasks_batch_async(
+        request_responses=responses,
+        batch_size=10 # this is pyrit default, we may try different configs (and load this from a conf file)
+    )
+
+    # Alternative way to score to have greater modularity (e.g. when scoring using an LLM and tune the delay between scoring evaluation)
+    # scores = []
+    # for res in responses:
+    #   # do something in between scoring evaluation (wait etc.)
+    #   score = objective_scorer.score_async(res)
+    #   scores.append[score]
+
+    return score_results
+
 async def run_test_sending_prompts(dataset_name: str='harmbench'):
     test_name = f"{dataset_name}_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
     logger.info(f"\n\n**** Running test {test_name} ****")
@@ -79,17 +86,11 @@ async def run_test_sending_prompts(dataset_name: str='harmbench'):
     }
 
     # Load dataset and prepare prompts
-    seed_prompts_dataset = load_dataset(dataset_name=dataset_name)
-    seed_prompts = seed_prompts_dataset.prompts[:2] # TODO limit the number of prompts for testing!
-    for sp in seed_prompts:
-        logger.debug(f"Seed prompt: {sp.__dict__}")
+    dataset = load_dataset(dataset_name=dataset_name)
+    seed_prompts = dataset.prompts[:3]
     logger.info('Prompt dataset loaded')
+    peek_dataset_info(dataset=dataset)
     await memory.add_seed_prompts_to_memory_async(prompts=seed_prompts, added_by="pyrit_test_framework")
-
-    # TODO
-    # for some reason the global dataset_name might be empty but set for each prompt
-    # write something to infer dataset info from prompts
-    peek_prompts_and_other_info(seed_prompts_dataset=seed_prompts_dataset, memory=memory)
 
     # we remove any newline/cr character
     prompts=[p.value.replace('\n', '').replace('\r', '') for p in seed_prompts]
@@ -98,7 +99,7 @@ async def run_test_sending_prompts(dataset_name: str='harmbench'):
     logger.debug(f"System prompt: {system_prompt}")
     # TODO remove SYSTEM PROMPT/MESSAGE PROMPT separation
     prompt_list = [f"SYSTEM PROMPT: {system_prompt} MESSAGE PROMPT: {p}" for p in prompts]
-    logger.debug(prompt_list)
+    logger.debug(prompt_list[:3])
 
     # The target you are pointing to
     objective_target = OpenAIChatTarget(
@@ -115,6 +116,7 @@ async def run_test_sending_prompts(dataset_name: str='harmbench'):
     #   full_endpoint=config_loader._content_filter_endpoint,
     #   threshold=0.6)
 
+    # TODO to be inverted with TrueFalseInverterScorer
     objective_scorer=scorer_factory.get_self_ask_refusal_scorer(target_checking_refusal=objective_target)
     # objective_scorer=scorer_factory.get_self_ask_likert_scorer(target=objective_target)
 
@@ -128,9 +130,12 @@ async def run_test_sending_prompts(dataset_name: str='harmbench'):
     logger.debug(f"Orchestrator details: {orchestrator.__dict__}")
 
     logger.info('Sending prompts to the target')
+    # TODO produce a SHA of the prompt to identify it later
+    # TODO among metadata trace a correspondance between seed_id (should be a static id for the prompt in the dataset)
+    # and the sha of the prompt, so that we can then match the response and the prompt to the original seed_id
     prompts_metadata_for_orchestrator = {
-        'dataset_name': seed_prompts_dataset.name,
-        'dataset_harm_categories': seed_prompts_dataset.harm_categories
+        'dataset_name': dataset.name,
+        'dataset_harm_categories': dataset.harm_categories
     }
     responses = await orchestrator.send_prompts_async(
         prompt_list=prompt_list,
@@ -145,20 +150,22 @@ async def run_test_sending_prompts(dataset_name: str='harmbench'):
     for resp in responses:
         logger.debug(f"Direct response:\n {resp.__dict__}")
 
-    results = PromptRequestResponse.flatten_to_prompt_request_pieces(responses)
-    # NON NEEDED, already added by orchestrator, if trying to do so, there will indeed be primary key violation for duplicate insert (reinserting something already committed to memory)
+    flattened_responses = PromptRequestResponse.flatten_to_prompt_request_pieces(responses)
+    # NOT NEEDED, already added by orchestrator, if trying to do so, there will indeed be primary key violation for duplicate insert (reinserting something already committed to memory)
     #memory.add_request_pieces_to_memory(request_pieces=results)
 
     # TODO replace the following with producing a report and saving results to a specified folder
     logger.debug('\n\n** Printing flattened response pieces **\n')
-    for result in results:
-        logger.debug(f"Flattened response piece:\n {result.to_dict()} \n********\n")
+    for flat_res in flattened_responses:
+        logger.debug(f"Flattened response piece:\n {flat_res.to_dict()} \n********\n")
 
-    score_results = await objective_scorer.score_responses_inferring_tasks_batch_async(request_responses=results)
-    memory.add_scores_to_memory(scores=score_results)
+    logger.info(f"Scoring the target's responses")
+
+    scoring_results = await score_results(scorer=objective_scorer, responses=flattened_responses)    
+    memory.add_scores_to_memory(scores=scoring_results)
 
     logger.debug('\n\n*** Printing score results ***\n')
-    for score_res in score_results:
+    for score_res in scoring_results:
         logger.debug('\n**********\n')
         logger.debug(f"Score_result:\n {score_res.to_dict()}")
 
@@ -173,7 +180,7 @@ async def run_test_sending_prompts(dataset_name: str='harmbench'):
     # It's empty, I think for unproper invocation of scorer inside PromptSendingOrchestrator
     logger.debug(f"Orchestrator scores after scoring: {orchestrator_scores}")
 
-    logger.info('Prompt responses received, gruping requests and responses')
+    logger.info('Prompt responses received and scored, gruping requests and responses')
     # pair each response with its request, using "conversation_id" as linking key
     req_res_pairs = group_request_response(orchestrator_req_res_pieces)
     for req_res_pair in req_res_pairs:

@@ -1,7 +1,7 @@
 import logging
 
 # TODO get severity level from config file
-LOG_LEVEL = logging.INFO
+LOG_LEVEL = logging.DEBUG
 
 # Configure logging
 logging.basicConfig(

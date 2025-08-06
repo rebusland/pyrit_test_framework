@@ -30,5 +30,3 @@ def get_self_ask_likert_scorer(target, likert_scale_path=LikertScalePaths.SEXUAL
 
 def get_composite_and_scorer():
     pass
-
-## TODO how to factory class??

@@ -1,6 +1,5 @@
 from pyrit.models import SeedPromptDataset
 from pyrit.common.path import DATASETS_PATH
-
 from pyrit.datasets import (
     harmbench_dataset,
     darkbench_dataset,
@@ -9,20 +8,39 @@ from pyrit.datasets import (
     red_team_social_bias_dataset
 )
 
+from logging_handler import logger
+
 import pathlib
 from threading import Lock
 
-# TODO improve with singleton pattern, enums for datasets etc.
-# TODO IMPORTANT: this might be useless as pyrit fetchers already manage caching with local db
-# we might add a "cachable" flag just to handle our custom datasets, and leave pyrit manage its own caching mechanism
+def peek_dataset_info(dataset: SeedPromptDataset):
+    logger.debug(f"**** Peek some info on dataset {dataset.dataset_name} ****")
+    logger.debug(f"Dataset description: {dataset.description}")
+    logger.debug(f"Dataset name: {dataset.dataset_name}")
+    logger.debug(f"Dataset data type: {dataset.data_type}")
+    logger.debug(f"Dataset authors:' + {dataset.authors}")
+    logger.debug(f"Dataset harm categories: {dataset.harm_categories}")
+    logger.debug(f"Dataset total number of prompts: {len(dataset.prompts)}")
+    logger.debug(f"Dataset Seed prompts (first 3 examples):\n {dataset.get_values()[:3]}\n")
+    logger.debug(f"Dataset prompt groups: {dataset.groups}")
+
+def enrich_dataset_info(dataset: SeedPromptDataset) -> None:
+    '''
+    Enrich dataset info (if missing) using info stored in seed prompts (useful for datasets retrieved using Pyrit APIs)
+    '''
+    # TODO
+    return dataset
+
 class LazyLoader:
-    def __init__(self, loaders):
+    def __init__(self, loaders_with_flags: dict[str, tuple[callable, bool]]):
         """
-        loaders: dict[str, callable] that return the heavy dataset on call.
+        loaders_with_flags: dict mapping dataset key to (loader function, should_cache bool)
+        Only puts in cache what's specified
         """
-        self._loaders = loaders
+        self._should_cache = {k: v[0] for k, v in loaders_with_flags.items()}
+        self._loaders = {k: v[1] for k, v in loaders_with_flags.items()}
         self._cache = {}
-        self._locks = {key: Lock() for key in loaders}
+        self._locks = {key: Lock() for key in self._loaders}
 
     def get(self, key):
         # Return cached if available
@@ -32,45 +50,38 @@ class LazyLoader:
         if key not in self._loaders:
             raise KeyError(f"Dataset '{key}' not found")
 
-        # Use a lock per key to prevent race conditions on loading
+        # Use a lock per key to prevent race conditions
         with self._locks[key]:
-            # Double-check after acquiring lock
             if key in self._cache:
                 return self._cache[key]
-            # Load dataset heavy operation
-            dataset = self._loaders[key]()
-            self._cache[key] = dataset
+            # enrich dataset info if missing
+            dataset = enrich_dataset_info(self._loaders[key]())
+
+            if self._should_cache.get(key, True):  # default to True
+                self._cache[key] = dataset
             return dataset
 
     def preload(self, key):
-        """
-        Force loading of dataset and caching without waiting for user access.
-        """
         return self.get(key)
 
     def clear_cache(self, key=None):
-        """
-        Clear cached datasets. If key is None, clears all.
-        """
         if key is None:
             self._cache.clear()
         else:
             self._cache.pop(key, None)
 
     def is_loaded(self, key):
-        """
-        Check if a dataset is already loaded and cached.
-        """
         return key in self._cache
 
-# dict dataset-name : closure of SeedPromptDataset (lazy loading)
+# the dataset loaded by pyrit don't need a custom cache as they manage caching themselves. But the lazy loader might be useful for custom datasets.
+# dict dataset-name : tuple(should_cache, fetcher of SeedPromptDataset) (lazy loading)
 _datasets = {
-    "illegal": lambda: SeedPromptDataset.from_yaml_file(pathlib.Path(DATASETS_PATH)/"seed_prompts"/"illegal.prompt"),
-    "harmbench": lambda: harmbench_dataset.fetch_harmbench_dataset(),
-    "darkbench": lambda: darkbench_dataset.fetch_darkbench_dataset(),
-    "forbidden": lambda: forbidden_questions_dataset.fetch_forbidden_questions_dataset(),
-    "librai": lambda: librAI_do_not_answer_dataset.fetch_librAI_do_not_answer_dataset(),
-    "bias": lambda: red_team_social_bias_dataset.fetch_red_team_social_bias_dataset(),
+    "illegal": (True, lambda: SeedPromptDataset.from_yaml_file(pathlib.Path(DATASETS_PATH)/"seed_prompts"/"illegal.prompt")),
+    "harmbench": (False, lambda: harmbench_dataset.fetch_harmbench_dataset()),
+    "darkbench": (False, lambda: darkbench_dataset.fetch_darkbench_dataset()),
+    "forbidden": (False, lambda: forbidden_questions_dataset.fetch_forbidden_questions_dataset()),
+    "librai": (False, lambda: librAI_do_not_answer_dataset.fetch_librAI_do_not_answer_dataset()),
+    "bias": (False, lambda: red_team_social_bias_dataset.fetch_red_team_social_bias_dataset()),
 }
 
 lazy_dataset_loader = LazyLoader(_datasets)
