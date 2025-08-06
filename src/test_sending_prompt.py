@@ -35,7 +35,6 @@ def peek_prompts_and_other_info(seed_prompts_dataset, memory):
     for g in memory.get_seed_prompt_groups():
         logger.debug(str(g.prompts))
 
-
 def get_prompt_request_piece_type(prompt_req_piece: PromptRequestPiece) -> PromptRequestPieceType:
     '''
     Find if a PromptRequestPiece message is a request or a response
@@ -84,11 +83,13 @@ async def run_test_sending_prompts():
     # write something to infer dataset info from prompts
     peek_prompts_and_other_info(seed_prompts_dataset=seed_prompts_dataset, memory=memory)
 
-    prompts=[p.value for p in seed_prompts]
+    # we remove any newline/cr character
+    prompts=[p.value.replace('\n', '').replace('\r', '') for p in seed_prompts]
 
     system_prompt=config_loader.load_system_prompt() # the default one
     logger.debug(f"System prompt: {system_prompt}")
-    prompt_list = [f"SYSTEM PROMPT: {system_prompt}\nMESSAGE PROMPT: {p}" for p in prompts]
+    # TODO remove SYSTEM PROMPT/MESSAGE PROMPT separation
+    prompt_list = [f"SYSTEM PROMPT: {system_prompt} MESSAGE PROMPT: {p}" for p in prompts]
     logger.debug(prompt_list)
 
     # The target you are pointing to
@@ -173,6 +174,7 @@ async def run_test_sending_prompts():
     for p_res in prompt_results:
         logger.info(p_res)
 
+    reporting.save_prompt_results_to_csv(results=prompt_results, compact=True)
     #reporting.dump_debug_log(memory=memory)
     #reporting.dump_to_json(memory=memory)
 

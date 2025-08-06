@@ -1,13 +1,17 @@
 from pyrit.models import (
     PromptRequestPiece,
-    Score
+    Score,
+    ScoreType
 )
 
-from typing import NamedTuple, Optional, Sequence
+from typing import Any, Callable, Dict, NamedTuple, Optional, Sequence
 from collections import namedtuple
 from enum import Enum
 import json
 import uuid
+from dataclasses import dataclass
+from datetime import datetime
+from enum import Enum
 
 class PromptRequestPieceType(Enum):
     REQUEST = 'request'
@@ -22,12 +26,56 @@ class ReqRespPair(NamedTuple):
         # Convert each element via to_dict and pretty-print as JSON
         return json.dumps({'request': self.request.to_dict(), 'response': self.response.to_dict()})
 
+class Scorer(Enum):
+    """
+    The scorers we support from PyRIT: 
+    """
+    SelfAskRefusalScorer='SelfAskRefusalScorer'
+
+@dataclass
+class ScoreResult:
+    '''
+    A more "flattened" and simplified version of the pyrit Score class
+    '''
+    score_value: bool
+    score_value_description: str
+    score_type: ScoreType
+    score_category: str
+    score_rationale: str
+    score_timestamp: datetime
+    scorer: Scorer
+
+    @staticmethod
+    def from_score(score: Score) -> 'ScoreResult':
+        return ScoreResult(
+            score_value=score.score_value,
+            score_value_description=score.score_value_description,
+            score_type=score.score_type,
+            score_category=score.score_category,
+            score_rationale=score.score_rationale,
+            score_timestamp=score.timestamp,
+            scorer=Scorer(score.scorer_class_identifier['__type__'])
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            'score_value': self.score_value,
+            'score_value_description': self.score_value_description,
+            'score_type': self.score_type,
+            'score_category': self.score_category,
+            'score_rationale': self.score_rationale,
+            'score_timestamp': self.score_timestamp.isoformat(),
+            'scorer': self.scorer.value
+        }
+
 class PromptResult(NamedTuple):
     id: uuid.UUID | str
     original_prompt: str
     converted_prompt: Optional[str]
+    target_response: Optional[str]
     # TODO unpack?? or create a dictionary scorer_type: scoring_results?
     scores: Sequence[Score]
+    #scores: Sequence[ScoreResult]
 
     @staticmethod
     def from_req_resp_pair(req_res_pair: ReqRespPair) -> 'PromptResult':
@@ -48,18 +96,31 @@ class PromptResult(NamedTuple):
             id=req_res_pair.request.conversation_id,
             original_prompt=req_res_pair.request.original_value,
             converted_prompt=req_res_pair.request.converted_value,
+            target_response=req_res_pair.response.original_value,
             scores=req_res_pair.response.scores
         )
 
-    def to_dict(self):
-        return json.dumps(
-            {
-                'id': self.id,
-                'original_prompt': self.original_prompt,
-                'converted_prompt': self.converted_prompt,
-                'score': [s.to_dict() for s in self.scores]
-            }
-        )
+    def to_dict(self, *,
+            extended: bool=True,
+            score_mapper: Callable[[Score], Any] = lambda s: json.dumps(s.to_dict())
+        ) -> dict[str, Any]:
+
+        out = {
+            'id': self.id,
+            'original_prompt': self.original_prompt,
+            'scores': [score_mapper(s) for s in self.scores]
+        }
+        if extended:
+            out['converted_prompt'] = self.converted_prompt
+            out['target_response'] = self.target_response
+
+        return out
+
+    def to_dict_extended(self) -> dict[str, Any]:
+        return self.to_dict(extended=True)
+
+    def to_dict_reduced(self) -> dict[str, Any]:
+        return self.to_dict(extended=False, score_mapper=lambda s: ScoreResult.from_score(s).to_dict())
 
     def __str__(self):
-        return self.to_dict()
+        return json.dumps(self.to_dict())

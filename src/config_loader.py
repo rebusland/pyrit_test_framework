@@ -80,5 +80,8 @@ def load_all_configs():
     return load_test_config()
 
 def load_system_prompt(prompt_name: str=EXAMPLE_SAFE_PROMPT):
+    '''
+    Remove any newline/cr characters
+    '''
     with open(_SYSTEM_PROMPTS_PATH + prompt_name) as file:
-        return file.read()
+        return file.read().replace('\n', '').replace('\r', '')

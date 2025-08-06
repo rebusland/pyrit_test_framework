@@ -7,6 +7,7 @@ from data_types import (
 )
 from logging_handler import logging
 
+from datetime import datetime
 import os
 import pathlib
 import csv
@@ -14,18 +15,27 @@ import json
 
 # TODO move and retrive from a config file!!
 # Where to save reports, conversations and so on
-OUTPUTS_DIR = "results/"
+OUTPUTS_DIR='results/'
+FILE_PROMPT_RESULT_PREFIX='prompt_results'
 
 os.makedirs(OUTPUTS_DIR, exist_ok=True)
 
-def save_prompt_results_to_csv(*, results: Sequence[PromptResult], output_folder_path: str=OUTPUTS_DIR, file_name: str='test_results.csv') -> None:
-    '''
-    with open(output_folder_path + '/' + file_name, mode='w', newline='', encoding='utf-8') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=filtered_data[0].keys())
+def save_prompt_results_to_csv(*, results: Sequence[PromptResult], compact: bool=False, output_folder_path: str=OUTPUTS_DIR, test_name: str='test') -> None:
+    if not results:
+        print("No data to write.")
+        return
+
+    result_mapper = PromptResult.to_dict_reduced if compact else PromptResult.to_dict_extended
+    dict_rows = [result_mapper(result) for result in results]
+    date_str = datetime.now().strftime("%d%m%Y_%H%M%S")
+    file_path=f"{output_folder_path}{FILE_PROMPT_RESULT_PREFIX}_{test_name}_{date_str}.csv"
+
+    # Write to CSV
+    with open(file_path, mode='w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=dict_rows[0].keys())
         writer.writeheader()
-        writer.writerows(filtered_data)
-    '''
-    pass
+        writer.writerows(dict_rows)
+
 
 def get_test_summary_report(*, results: Sequence[ReqRespPair]) -> dict:
     '''
