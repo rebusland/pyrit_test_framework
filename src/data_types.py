@@ -24,7 +24,10 @@ class ReqRespPair(NamedTuple):
 
     def __str__(self):
         # Convert each element via to_dict and pretty-print as JSON
-        return json.dumps({'request': self.request.to_dict(), 'response': self.response.to_dict()})
+        return json.dumps({
+            'request': self.request.to_dict(),
+            'response': self.response.to_dict()
+        })
 
 class Scorer(Enum):
     """
@@ -33,9 +36,90 @@ class Scorer(Enum):
     SelfAskRefusalScorer='SelfAskRefusalScorer'
 
 @dataclass
-class ScoreResult:
+class ScoresOrError:
     '''
-    A more "flattened" and simplified version of the pyrit Score class
+    This might store also an error message if scoring failed.
+    '''
+    scores: Optional[Sequence[Score]] = None
+    error: Optional[Exception] = None
+
+    @staticmethod
+    def from_scores(scores: Sequence[Score]) -> 'ScoresOrError':
+        return ScoresOrError(scores=scores)
+
+    @staticmethod
+    def from_error(error: Exception) -> 'ScoresOrError':
+        return ScoresOrError(error=error)
+
+    def is_success(self) -> bool:
+        return self.error is None
+
+    def is_error(self) -> bool:
+        return self.error is not None
+
+    def unwrap(self) -> Sequence[Score]:
+        if self.error:
+            raise self.error
+        if self.scores is None:
+            raise ValueError("No scores present despite success status")
+        return self.scores
+
+    def to_dict(self):
+        if self.error:
+            return {
+                "error": self.error.__dict__
+            }
+
+        if self.scores is None:
+            raise ValueError("No scores present despite missing errors")
+
+        return {
+            "scores": [s.to_dict() for s in self.scores]
+        }
+
+    def __str__(self):
+        return json.dumps(self.to_dict())
+
+@dataclass
+class ScoresAndResponse:
+    '''
+    It stores scores result and the response that was scored.
+    '''
+    prompt_response: PromptRequestPiece
+    score_or_error: ScoresOrError
+
+    def to_dict(self):
+        return {
+            "prompt_response": self.prompt_response.to_dict(),
+            "score_or_error": self.score_or_error.to_dict()
+        }
+
+    def __str__(self):
+        return json.dumps(self.to_dict())
+
+@dataclass
+class FattenedScoreResult:
+    '''
+    It stores also info about the prompt request sent and the response that was scored.
+    '''
+    prompt_request: PromptRequestPiece
+    prompt_response: PromptRequestPiece
+    score_or_error: ScoresOrError
+
+    def to_dict(self):
+        return {
+            "prompt_request": self.prompt_request.to_dict(),
+            "prompt_response": self.prompt_response.to_dict(),
+            "score_or_error": self.score_or_error.to_dict()
+        }
+
+    def __str__(self):
+        return json.dumps(self.to_dict())
+
+@dataclass
+class FlatScoreResult:
+    '''
+    A more "flattened" and simplified version of the pyrit Score class.add.
     '''
     score_value: bool
     score_value_description: str
@@ -46,8 +130,8 @@ class ScoreResult:
     scorer: Scorer
 
     @staticmethod
-    def from_score(score: Score) -> 'ScoreResult':
-        return ScoreResult(
+    def from_valid_score(score: Score) -> 'FlatScoreResult':
+        return FlatScoreResult(
             score_value=score.score_value,
             score_value_description=score.score_value_description,
             score_type=score.score_type,

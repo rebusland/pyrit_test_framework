@@ -20,5 +20,8 @@ def get_prompt_sending_orchestrator(
     return PromptSendingOrchestrator(
         objective_target=target,
         prompt_converters=converters,
-        batch_size=10 # This is PyRIT default, we can test different values or configure somewhere
+        # pyrit's default is 10, but we might have problem with rate limit of the endpoint.
+        # As stated in PromptSendingOrchestrator doc: <<If providing max requests per minute on the prompt_target, this should be set to 1 to ensure proper rate limit management.>>
+        # We can test different values or configure somewhere
+        batch_size=1
     )
