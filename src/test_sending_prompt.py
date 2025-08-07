@@ -70,6 +70,11 @@ async def score_results(scorer: Scorer, responses: Sequence[PromptRequestPiece])
     #   score = objective_scorer.score_async(res)
     #   scores.append[score]
 
+    logger.debug('\n\n*** Printing score results ***\n')
+    for score_res in score_results:
+        logger.debug('\n**********\n')
+        logger.debug(f"Score_result:\n {score_res.to_dict()}")
+
     return score_results
 
 async def run_test_sending_prompts(dataset_name: str='harmbench'):
@@ -85,9 +90,9 @@ async def run_test_sending_prompts(dataset_name: str='harmbench'):
         "test_name": test_name
     }
 
-    # Load dataset and prepare prompts
+    ##### LOADING DATASET AND PREPARING PROMPTS #####
     dataset = load_dataset(dataset_name=dataset_name)
-    seed_prompts = dataset.prompts[:3]
+    seed_prompts = dataset.prompts
     logger.info('Prompt dataset loaded')
     peek_dataset_info(dataset=dataset)
     await memory.add_seed_prompts_to_memory_async(prompts=seed_prompts, added_by="pyrit_test_framework")
@@ -101,7 +106,7 @@ async def run_test_sending_prompts(dataset_name: str='harmbench'):
     prompt_list = [f"SYSTEM PROMPT: {system_prompt} MESSAGE PROMPT: {p}" for p in prompts]
     logger.debug(prompt_list[:3])
 
-    # The target you are pointing to
+    ##### SETUP ORCHESTRATOR AND SEND PROMPTS TO TARGET LLM #####
     objective_target = OpenAIChatTarget(
         endpoint=config_loader._openai_full_endpoint,
         api_key=config_loader._openai_api_key,
@@ -109,24 +114,8 @@ async def run_test_sending_prompts(dataset_name: str='harmbench'):
         api_version=config_loader._openai_api_version
     )
 
-    #objective_scorer = scorer_factory.get_substring_scorer(substring='feci')
-    
-    #objective_scorer = scorer_factory.get_float_threshold_azure_content_filter_scorer(
-    #   api_key=config_loader._content_filter_key,
-    #   full_endpoint=config_loader._content_filter_endpoint,
-    #   threshold=0.6)
-
-    # TODO to be inverted with TrueFalseInverterScorer
-    objective_scorer=scorer_factory.get_self_ask_refusal_scorer(target_checking_refusal=objective_target)
-    # objective_scorer=scorer_factory.get_self_ask_likert_scorer(target=objective_target)
-
-    # Configure the orchestrator you want to use. This is the basis of your attack strategy.
-    # This could be a single turn or multi turn.
-    # In this case, we're using PromptSendingOrchestrator to simply send the prompts.
-    orchestrator = orchestrator_factory.get_prompt_sending_orchestrator(
-        target=objective_target,
-        scorers=[objective_scorer]
-    )
+    # We support only single-turn attacks with prompts firing
+    orchestrator = orchestrator_factory.get_prompt_sending_orchestrator(target=objective_target)
     logger.debug(f"Orchestrator details: {orchestrator.__dict__}")
 
     logger.info('Sending prompts to the target')
@@ -151,33 +140,36 @@ async def run_test_sending_prompts(dataset_name: str='harmbench'):
         logger.debug(f"Direct response:\n {resp.__dict__}")
 
     flattened_responses = PromptRequestResponse.flatten_to_prompt_request_pieces(responses)
-    # NOT NEEDED, already added by orchestrator, if trying to do so, there will indeed be primary key violation for duplicate insert (reinserting something already committed to memory)
-    #memory.add_request_pieces_to_memory(request_pieces=results)
+    # not needed, already added by orchestrator, if trying to do so, there will indeed be primary key violation for duplicate insert (reinserting something already committed to memory)
+    # memory.add_request_pieces_to_memory(request_pieces=results)
 
-    # TODO replace the following with producing a report and saving results to a specified folder
     logger.debug('\n\n** Printing flattened response pieces **\n')
     for flat_res in flattened_responses:
         logger.debug(f"Flattened response piece:\n {flat_res.to_dict()} \n********\n")
 
+    ######## SCORING ########
     logger.info(f"Scoring the target's responses")
+    #objective_scorer = scorer_factory.get_substring_scorer(substring='feci')
+    
+    #objective_scorer = scorer_factory.get_float_threshold_azure_content_filter_scorer(
+    #   api_key=config_loader._content_filter_key,
+    #   full_endpoint=config_loader._content_filter_endpoint,
+    #   threshold=0.6)
+
+    # TODO to be inverted with TrueFalseInverterScorer
+    objective_scorer=scorer_factory.get_self_ask_refusal_scorer(target_checking_refusal=objective_target)
+    # objective_scorer=scorer_factory.get_self_ask_likert_scorer(target=objective_target)
 
     scoring_results = await score_results(scorer=objective_scorer, responses=flattened_responses)    
     memory.add_scores_to_memory(scores=scoring_results)
 
-    logger.debug('\n\n*** Printing score results ***\n')
-    for score_res in scoring_results:
-        logger.debug('\n**********\n')
-        logger.debug(f"Score_result:\n {score_res.to_dict()}")
-
+    ##### COLLECTING AND MODELLING THE RESULTS #####
     orchestrator_req_res_pieces = orchestrator.get_memory()
-    # group req/response
-    # req/response are matched by conversation_id
-    # req have role="user", responses have role="assistant" and prompt_request_response_id filled
     logger.debug(f"Orchestrator req/res history after scoring:")
     for req_res_piece in orchestrator_req_res_pieces:
         logger.debug(f"Req/response piece:\n{req_res_piece.to_dict()}")
     orchestrator_scores = [s.to_dict() for s in orchestrator.get_score_memory()]
-    # It's empty, I think for unproper invocation of scorer inside PromptSendingOrchestrator
+    # Should be empty
     logger.debug(f"Orchestrator scores after scoring: {orchestrator_scores}")
 
     logger.info('Prompt responses received and scored, gruping requests and responses')
@@ -191,10 +183,12 @@ async def run_test_sending_prompts(dataset_name: str='harmbench'):
     for p_res in prompt_results:
         logger.debug(p_res)
 
+    ##### SAVING AND REPORTING TEST RESULTS #####
     logger.info('Saving prompt results and producing test report')
     reporting.save_prompt_results_to_csv(results=prompt_results, compact=True, test_name=test_name)
     #reporting.dump_debug_log(memory=memory)
     #reporting.dump_to_json(memory=memory)
+
     logger.info(f"**** Finished test {test_name} ****")
 
 if __name__ == "__main__":
