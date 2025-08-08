@@ -4,7 +4,7 @@ from pyrit.models import (
     ScoreType
 )
 
-from typing import Any, Callable, Dict, NamedTuple, Optional, Sequence
+from typing import Any, Callable, NamedTuple, Optional, Sequence
 from collections import namedtuple
 from enum import Enum
 import json
@@ -17,17 +17,6 @@ class PromptRequestPieceType(Enum):
     REQUEST = 'request'
     RESPONSE = 'response'
     OTHER = 'other' # this might be system messages (?)
-
-class ReqRespPair(NamedTuple):
-    request: PromptRequestPiece
-    response: PromptRequestPiece
-
-    def __str__(self):
-        # Convert each element via to_dict and pretty-print as JSON
-        return json.dumps({
-            'request': self.request.to_dict(),
-            'response': self.response.to_dict()
-        })
 
 class Scorer(Enum):
     """
@@ -98,7 +87,7 @@ class ScoresAndResponse:
         return json.dumps(self.to_dict())
 
 @dataclass
-class FattenedScoreResult:
+class FattenedScoringResult:
     '''
     It stores also info about the prompt request sent and the response that was scored.
     '''
@@ -143,13 +132,13 @@ class FlatScoreResult:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            'score_value': self.score_value,
-            'score_value_description': self.score_value_description,
-            'score_type': self.score_type,
-            'score_category': self.score_category,
-            'score_rationale': self.score_rationale,
-            'score_timestamp': self.score_timestamp.isoformat(),
-            'scorer': self.scorer.value
+            "score_value": self.score_value,
+            "score_value_description": self.score_value_description,
+            "score_type": self.score_type,
+            "score_category": self.score_category,
+            "score_rationale": self.score_rationale,
+            "score_timestamp": self.score_timestamp.isoformat(),
+            "scorer": self.scorer.value
         }
 
 class PromptResult(NamedTuple):
@@ -158,45 +147,44 @@ class PromptResult(NamedTuple):
     converted_prompt: Optional[str]
     target_response: Optional[str]
     # TODO unpack?? or create a dictionary scorer_type: scoring_results?
-    scores: Sequence[Score]
-    #scores: Sequence[ScoreResult]
+    scores_or_error: Sequence[ScoresOrError]
 
     @staticmethod
-    def from_req_resp_pair(req_res_pair: ReqRespPair) -> 'PromptResult':
+    def from_fat_score_result(fat_scoring_res: FattenedScoringResult) -> 'PromptResult':
         '''
-        Extract relevant infos from the Request/Response pair (original prompt, target response, scoring metrics etc.)
-        from the request piece I have these relevant info:
+        Extract relevant infos from the req/resp/scores (original prompt, target response, scoring metrics etc.)
+        From the request piece we have these relevant info:
         - under "original_value" the original prompt
         - under "converted_value" the prompt modified by the converter(s)
         - "response_error" might be useful
 
-        from the response pieces I can get these relevant info:
+        From the response pieces we can get these relevant info:
         - under "scores"[index]."task" I have the original prompt sent (NOT CONVERTED)
         - under "original_value" the response from the target
         - under "scores" all the relevant scoring infos (score_rationale, score_value etc.) for each scorer applied
-        - I have then other useful info like "converted_value"
+        - We then have other useful info like "converted_value"
         '''
         return PromptResult(
-            id=req_res_pair.request.conversation_id,
-            original_prompt=req_res_pair.request.original_value,
-            converted_prompt=req_res_pair.request.converted_value,
-            target_response=req_res_pair.response.original_value,
-            scores=req_res_pair.response.scores
+            id=fat_scoring_res.prompt_request.conversation_id,
+            original_prompt=fat_scoring_res.prompt_request.original_value,
+            converted_prompt=fat_scoring_res.prompt_request.converted_value,
+            target_response=fat_scoring_res.prompt_response.original_value,
+            scores_or_error=fat_scoring_res.score_or_error
         )
 
     def to_dict(self, *,
             extended: bool=True,
-            score_mapper: Callable[[Score], Any] = lambda s: json.dumps(s.to_dict())
+            scores_error_mapper: Callable[[ScoresOrError], dict] = lambda s: s.to_dict()
         ) -> dict[str, Any]:
 
         out = {
-            'id': self.id,
-            'original_prompt': self.original_prompt,
-            'scores': [score_mapper(s) for s in self.scores]
+            "id": self.id,
+            "original_prompt": self.original_prompt,
+            "scores": scores_error_mapper(self.scores_or_error)
         }
         if extended:
-            out['converted_prompt'] = self.converted_prompt
-            out['target_response'] = self.target_response
+            out["converted_prompt"] = self.converted_prompt
+            out["target_response"] = self.target_response
 
         return out
 
@@ -204,7 +192,11 @@ class PromptResult(NamedTuple):
         return self.to_dict(extended=True)
 
     def to_dict_reduced(self) -> dict[str, Any]:
-        return self.to_dict(extended=False, score_mapper=lambda s: ScoreResult.from_score(s).to_dict())
+        return self.to_dict(
+            extended=False,
+            scores_error_mapper=lambda s:
+                [FlatScoreResult.from_valid_score(vscore).to_dict() for vscore in s.scores] if s.is_success() else s.to_dict()
+        )
 
     def __str__(self):
         return json.dumps(self.to_dict())

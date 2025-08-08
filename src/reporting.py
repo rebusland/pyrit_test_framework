@@ -1,8 +1,7 @@
-from typing import Dict, Sequence
+from typing import Sequence
 from pyrit.memory import MemoryInterface
 
 from data_types import (
-    ReqRespPair,
     PromptResult
 )
 from logging_handler import logging
@@ -44,7 +43,7 @@ def save_prompt_results_to_csv(
 def read_results_from_csv(*, file_name: str, compact: bool=False):
     pass
 
-def get_test_summary_report(*, results: Sequence[ReqRespPair]) -> dict:
+def get_test_summary_report(*, results: Sequence[PromptResult]) -> dict:
     '''
     from the request piece I have these relevant info:
      - under "original_value" the original prompt
