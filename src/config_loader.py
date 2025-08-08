@@ -7,7 +7,8 @@ import os
 ## Prepended prompts
 _SYSTEM_PROMPTS_PATH = "config/system_prompts/"
 EXAMPLE_SAFE_PROMPT='example_safe_prompt.txt'
-CHILDREN_SAFE_PROMPT='children_safe_prompt.txt'
+CHILDREN_SAFE_PROMPT_ENG='children_safe_prompt_eng.txt'
+CHILDREN_SAFE_PROMPT_ITA='children_safe_prompt_ita.txt'
 VERIFICATION_PROMPT='verification_prompt.txt'
 
 load_dotenv()
