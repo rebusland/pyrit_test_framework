@@ -21,7 +21,7 @@ from data_types import (
     PromptResult,
     ScoresAndResponse
 )
-from utils import run_only_if_log_level_debug
+from utils import log_execution_time, run_only_if_log_level_debug
 
 import asyncio
 from typing import Any, Sequence
@@ -96,6 +96,7 @@ def peek_iterable(
     for el in iterable:
         logger.debug(f"{element_description}: {stringifyier(el)}")
 
+@log_execution_time(return_time=False)
 async def run_test_sending_prompts(dataset_name: str='harmbench'):
     test_name = f"{dataset_name}_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
     logger.info(f"\n\n**** Running test {test_name} ****")
