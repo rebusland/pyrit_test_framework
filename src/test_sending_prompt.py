@@ -21,11 +21,13 @@ from data_types import (
     PromptResult,
     ScoresAndResponse
 )
+from utils import run_only_if_log_level_debug
 
 import asyncio
 from typing import Any, Sequence
 from datetime import datetime
 import json
+import itertools
 
 config_loader.load_dotenv_with_check()
 config_loader.load_openai_configs()
@@ -76,6 +78,13 @@ def get_prompt_list(seed_prompts: Sequence[SeedPrompt], system_prompt: str=confi
     logger.debug(f"Peek the first three prompts to send:\n{prompt_list[:3]}")
     return prompt_list
 
+@run_only_if_log_level_debug()
+def peek_scores_in_memory(*, memory: MemoryInterface, scores_and_responses: Sequence[ScoresAndResponse]):
+    valid_scores = list(itertools.chain.from_iterable([fsr.score_or_error.unwrap() for fsr in scores_and_responses if fsr.score_or_error.is_success()]))
+    scores_in_memory = memory.get_scores_by_prompt_ids(prompt_request_response_ids=[vs.prompt_request_response_id for vs in valid_scores])  # this is not working: get_scores_by_orchestrator_id(orchestrator_id=orchestrator.get_identifier())
+    peek_iterable(iterable=scores_in_memory, header=f"There are {len(scores_in_memory)} Score objects committed to pyrit memory", element_description="Score in pyrit memory", stringifyier=lambda score_in_memory : json.dumps(score_in_memory.to_dict()))
+
+@run_only_if_log_level_debug()
 def peek_iterable(
     *,
     iterable: Sequence[Any],
@@ -152,17 +161,13 @@ async def run_test_sending_prompts(dataset_name: str='harmbench'):
     objective_scorer=scorer_factory.get_self_ask_refusal_scorer(target_checking_refusal=objective_target)
     # objective_scorer=scorer_factory.get_self_ask_likert_scorer(target=objective_target)
 
-    scores_and_responses = await scoring_manager.score_results(scorer=objective_scorer, responses=flattened_responses)    
+    scores_and_responses = await scoring_manager.score_results(
+        scorer=objective_scorer,
+        responses=flattened_responses,
+        memory=memory
+    )
     peek_iterable(iterable=scores_and_responses, header="Score results enriched with the scored prompt response", element_description="Score + Response")
-
-    # add just valid scores to pyrit memory, valid_scores is a list[list[Score]] and needs to be flattened
-    # Not needed! valid scores are already added to memory under the hood by the pyrit's method score_async
-    # valid_scores = [fsr.score_or_error.unwrap() for fsr in scores_and_responses if fsr.score_or_error.is_success()]
-    # memory.add_scores_to_memory(scores=[score for sublist in valid_scores for score in sublist])
-    
-    #valid_scores = [fsr.score_or_error.unwrap() for fsr in scores_and_responses if fsr.score_or_error.is_success()]
-    #scores_in_memory = memory.get_scores_by_prompt_ids(prompt_request_response_ids=[vs for vs in valid_scores])  # this is not working: get_scores_by_orchestrator_id(orchestrator_id=orchestrator.get_identifier())
-    #peek_iterable(iterable=scores_in_memory, header=f"There are {len(scores_in_memory)} Score objects committed to pyrit memory", element_description="Score in pyrit memory", stringifyier=lambda score_in_memory : json.dumps(score_in_memory.to_dict()))
+    peek_scores_in_memory(memory=memory, scores_and_responses=scores_and_responses)
 
     ##### COLLECTING AND MODELLING THE RESULTS #####
     orchestrator_req_res_pieces = orchestrator.get_memory()

@@ -27,6 +27,8 @@ class Scorer(Enum):
 @dataclass
 class ScoresOrError:
     '''
+    Pyrit scorers return a list of scores for a single evaluation. In most cases, it's a single score,
+    but in some cases different scores are produced for a single prompt response.
     This might store also an error message if scoring failed.
     '''
     scores: Optional[Sequence[Score]] = None
@@ -106,7 +108,7 @@ class FattenedScoringResult:
         return json.dumps(self.to_dict())
 
 @dataclass
-class FlatScoreResult:
+class CompactScoreResult:
     '''
     A more "flattened" and simplified version of the pyrit Score class.add.
     '''
@@ -119,8 +121,8 @@ class FlatScoreResult:
     scorer: Scorer
 
     @staticmethod
-    def from_valid_score(score: Score) -> 'FlatScoreResult':
-        return FlatScoreResult(
+    def from_valid_score(score: Score) -> 'CompactScoreResult':
+        return CompactScoreResult(
             score_value=score.score_value,
             score_value_description=score.score_value_description,
             score_type=score.score_type,
@@ -141,13 +143,16 @@ class FlatScoreResult:
             "scorer": self.scorer.value
         }
 
+    def __str__(self):
+        return json.dumps(self.to_dict())
+
 class PromptResult(NamedTuple):
     id: uuid.UUID | str
     original_prompt: str
     converted_prompt: Optional[str]
     target_response: Optional[str]
     # TODO unpack?? or create a dictionary scorer_type: scoring_results?
-    scores_or_error: Sequence[ScoresOrError]
+    scores_or_error: ScoresOrError
 
     @staticmethod
     def from_fat_score_result(fat_scoring_res: FattenedScoringResult) -> 'PromptResult':
@@ -174,7 +179,7 @@ class PromptResult(NamedTuple):
 
     def to_dict(self, *,
             extended: bool=True,
-            scores_error_mapper: Callable[[ScoresOrError], dict] = lambda s: s.to_dict()
+            scores_error_mapper: Callable[[ScoresOrError], Sequence[Any] | dict] = lambda s: s.to_dict()
         ) -> dict[str, Any]:
 
         out = {
@@ -194,9 +199,19 @@ class PromptResult(NamedTuple):
     def to_dict_reduced(self) -> dict[str, Any]:
         return self.to_dict(
             extended=False,
-            scores_error_mapper=lambda s:
-                [FlatScoreResult.from_valid_score(vscore).to_dict() for vscore in s.scores] if s.is_success() else s.to_dict()
+            scores_error_mapper=lambda scores_or_error: 
+            [CompactScoreResult.from_valid_score(s).to_dict() for s in scores_or_error.unwrap()] if scores_or_error.is_success() else scores_or_error.to_dict()                
         )
+
+    def to_dict_reduced_and_try_scores_flattening(self) -> dict[str, Any]:
+        '''
+        Check if scores is actually one element (typical): if so the dictionary representation of scores is replaced with a plain dict instead of a list
+        '''
+        if self.scores_or_error.is_success() and len(self.scores_or_error.unwrap()) == 1:
+            return self.to_dict(extended=False,
+                scores_error_mapper= lambda sc_err : CompactScoreResult.from_valid_score(sc_err.unwrap()[0]).to_dict())
+        
+        return self.to_dict_reduced()
 
     def __str__(self):
         return json.dumps(self.to_dict())

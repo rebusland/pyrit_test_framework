@@ -9,10 +9,12 @@ from pyrit.datasets import (
 )
 
 from logging_handler import logger
+from utils import run_only_if_log_level_debug
 
 import pathlib
 from threading import Lock
 
+@run_only_if_log_level_debug()
 def peek_dataset_info(dataset: SeedPromptDataset):
     logger.debug(f"\n\n**** Peek some info on dataset {dataset.dataset_name} ****\n\n")
     logger.debug(f"Dataset description: {dataset.description}")

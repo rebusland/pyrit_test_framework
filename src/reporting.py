@@ -30,7 +30,7 @@ def save_prompt_results_to_csv(
         print("No data to write.")
         return
 
-    result_mapper = PromptResult.to_dict_reduced if compact else PromptResult.to_dict_extended
+    result_mapper = PromptResult.to_dict_reduced_and_try_scores_flattening if compact else PromptResult.to_dict_extended
     dict_rows = [result_mapper(result) for result in results]
     file_path=f"{output_folder_path}{FILE_PROMPT_RESULT_PREFIX}_{test_name}.csv"
 
