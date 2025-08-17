@@ -13,7 +13,7 @@ import scoring_manager
 import orchestrator_factory
 from memory_manager import MemoryManager
 from dataset_helper import load_dataset, peek_dataset_info
-from logging_handler import logger
+from logging_handler import logger, peek_iterable
 import reporting
 from data_types import (
     FattenedScoringResult,
@@ -84,18 +84,6 @@ def peek_scores_in_memory(*, memory: MemoryInterface, scores_and_responses: Sequ
     valid_scores = list(itertools.chain.from_iterable([fsr.score_or_error.unwrap() for fsr in scores_and_responses if fsr.score_or_error.is_success()]))
     scores_in_memory = memory.get_scores_by_prompt_ids(prompt_request_response_ids=[vs.prompt_request_response_id for vs in valid_scores])  # this is not working: get_scores_by_orchestrator_id(orchestrator_id=orchestrator.get_identifier())
     peek_iterable(iterable=scores_in_memory, header=f"There are {len(scores_in_memory)} Score objects committed to pyrit memory", element_description="Score in pyrit memory", stringifyier=lambda score_in_memory : json.dumps(score_in_memory.to_dict()))
-
-@run_only_if_log_level_debug()
-def peek_iterable(
-    *,
-    iterable: Sequence[Any],
-    header: str,
-    element_description: str,
-    stringifyier = lambda el : str(el)
-) -> None:
-    logger.debug(f"\n\n\n ****** {header} ******\n\n")
-    for el in iterable:
-        logger.debug(f"{element_description}: {stringifyier(el)}")
 
 @log_execution_time(return_time=False)
 async def run_test_sending_prompts(dataset_name: str='harmbench'):
