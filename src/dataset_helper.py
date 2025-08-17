@@ -16,7 +16,7 @@ from threading import Lock
 
 @run_only_if_log_level_debug()
 def peek_dataset_info(dataset: SeedPromptDataset):
-    logger.debug(f"\n\n**** Peek some info on dataset {dataset.dataset_name} ****\n\n")
+    logger.debug(f"\n\n**** Peek some info on dataset {dataset.dataset_name} ****\n")
     logger.debug(f"Dataset description: {dataset.description}")
     logger.debug(f"Dataset name: {dataset.dataset_name}")
     logger.debug(f"Dataset data type: {dataset.data_type}")

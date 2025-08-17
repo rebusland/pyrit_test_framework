@@ -7,7 +7,7 @@ from pyrit.models import (
 # from pyrit.prompt_converter.charswap_attack_converter import CharSwapGenerator
 from pyrit.prompt_target import OpenAIChatTarget
 
-import config_loader
+import config_handler
 import scorer_factory
 import scoring_manager
 import orchestrator_factory
@@ -29,8 +29,8 @@ from datetime import datetime
 import json
 import itertools
 
-config_loader.load_dotenv_with_check()
-config_loader.load_openai_configs()
+config_handler.load_dotenv_with_check()
+config_handler.load_openai_configs()
 
 def get_prompt_request_piece_type(prompt_req_piece: PromptRequestPiece) -> PromptRequestPieceType:
     '''
@@ -68,11 +68,11 @@ def find_request_and_enrich_score_result(*,
         score_or_error=scores_and_response.score_or_error
     )
 
-def get_prompt_list(seed_prompts: Sequence[SeedPrompt], system_prompt: str=config_loader.CHILDREN_SAFE_PROMPT_ENG) -> Sequence[str]:
+def get_prompt_list(seed_prompts: Sequence[SeedPrompt], system_prompt: str=config_handler.CHILDREN_SAFE_PROMPT_ENG) -> Sequence[str]:
     # we remove any newline/cr character
     prompts=[p.value.replace('\n', '').replace('\r', '') for p in seed_prompts]
     prompts.append('Tell me something about rabbits, in less than 50 words')
-    system_prompt=config_loader.load_system_prompt(system_prompt) # the default one
+    system_prompt=config_handler.load_system_prompt(system_prompt) # the default one
     logger.debug(f"System prompt: {system_prompt}")
     # TODO remove SYSTEM PROMPT/MESSAGE PROMPT separation
     prompt_list = [f"SYSTEM PROMPT: {system_prompt} MESSAGE PROMPT: {p}" for p in prompts]
@@ -85,8 +85,8 @@ def peek_scores_in_memory(*, memory: MemoryInterface, scores_and_responses: Sequ
     scores_in_memory = memory.get_scores_by_prompt_ids(prompt_request_response_ids=[vs.prompt_request_response_id for vs in valid_scores])  # this is not working: get_scores_by_orchestrator_id(orchestrator_id=orchestrator.get_identifier())
     peek_iterable(iterable=scores_in_memory, header=f"There are {len(scores_in_memory)} Score objects committed to pyrit memory", element_description="Score in pyrit memory", stringifyier=lambda score_in_memory : json.dumps(score_in_memory.to_dict()))
 
-@log_execution_time(return_time=False)
-async def run_test_sending_prompts(dataset_name: str='harmbench'):
+@log_execution_time(return_time=True)
+async def run_dataset(*, dataset_name: str):
     test_name = f"{dataset_name}_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
     logger.info(f"\n\n**** Running test {test_name} ****")
     memory_manager = MemoryManager()
@@ -110,10 +110,10 @@ async def run_test_sending_prompts(dataset_name: str='harmbench'):
 
     ##### SETUP ORCHESTRATOR AND SEND PROMPTS TO TARGET LLM #####
     objective_target = OpenAIChatTarget(
-        endpoint=config_loader._openai_full_endpoint,
-        api_key=config_loader._openai_api_key,
-        model_name=config_loader._openai_deployment,
-        api_version=config_loader._openai_api_version
+        endpoint=config_handler._openai_full_endpoint,
+        api_key=config_handler._openai_api_key,
+        model_name=config_handler._openai_deployment,
+        api_version=config_handler._openai_api_version
     )
 
     # We support only single-turn attacks with prompts firing
@@ -179,9 +179,29 @@ async def run_test_sending_prompts(dataset_name: str='harmbench'):
 
     logger.info(f"**** Finished test {test_name} ****")
 
+# ---- Main Entry ----
+@log_execution_time(return_time=False)
+async def run_tests(config):
+    datasets = config['datasets']
+    logger.debug(f"Datasets loaded from config: {datasets}")
+    test_session_name = f"test_session_{len(datasets)}_datasets_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
+    logger.info(f"\n\n**** Running test session {test_session_name} with {len(datasets)} datasets ****")
+
+    # TODO Target and Scorer can be instantiated here and passed to each test (dataset)
+    # target_llm and scorer should be built from config (e.g. OpenAIChatTarget and SelfAskRefusalScorer)
+    # target_llm = config["target_llm"]
+    # scorers = config["scorers"]
+
+    elapsed_per_dataset = {}
+    for dataset in datasets:
+        elapsed_per_dataset[dataset] = await run_dataset(dataset_name=dataset) # target_llm, scorers)
+
+    logger.info(f"Time elapsed per dataset: {json.dumps(elapsed_per_dataset)}")
+    logger.info(f"**** Finished test session {test_session_name} ****")
 
 if __name__ == "__main__":
     try:
-        asyncio.run(run_test_sending_prompts())
+        conf = config_handler.load_all_configs()
+        asyncio.run(run_tests(config=conf))
     except Exception as e:
         logger.critical(f"Unhandled exception: {e}", exc_info=True)
