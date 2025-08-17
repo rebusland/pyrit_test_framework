@@ -6,6 +6,7 @@ from pyrit.models import (
 )
 # from pyrit.prompt_converter.charswap_attack_converter import CharSwapGenerator
 from pyrit.prompt_target import OpenAIChatTarget
+from pyrit.score import Scorer
 
 import config_handler
 import scorer_factory
@@ -86,7 +87,11 @@ def peek_scores_in_memory(*, memory: MemoryInterface, scores_and_responses: Sequ
     peek_iterable(iterable=scores_in_memory, header=f"There are {len(scores_in_memory)} Score objects committed to pyrit memory", element_description="Score in pyrit memory", stringifyier=lambda score_in_memory : json.dumps(score_in_memory.to_dict()))
 
 @log_execution_time(return_time=True)
-async def run_dataset(*, dataset_name: str):
+async def run_dataset(*,
+        dataset_name: str,
+        objective_target: OpenAIChatTarget,
+        objective_scorer: Scorer
+    ):
     test_name = f"{dataset_name}_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
     logger.info(f"\n\n**** Running test {test_name} ****")
     memory_manager = MemoryManager()
@@ -109,13 +114,6 @@ async def run_dataset(*, dataset_name: str):
     prompt_list = get_prompt_list(seed_prompts=seed_prompts)
 
     ##### SETUP ORCHESTRATOR AND SEND PROMPTS TO TARGET LLM #####
-    objective_target = OpenAIChatTarget(
-        endpoint=config_handler._openai_full_endpoint,
-        api_key=config_handler._openai_api_key,
-        model_name=config_handler._openai_deployment,
-        api_version=config_handler._openai_api_version
-    )
-
     # We support only single-turn attacks with prompts firing
     orchestrator = orchestrator_factory.get_prompt_sending_orchestrator(target=objective_target)
     logger.debug(f"Orchestrator details: {orchestrator.__dict__}")
@@ -142,14 +140,6 @@ async def run_dataset(*, dataset_name: str):
 
     ######## SCORING ########
     logger.info(f"Scoring the target's responses")    
-    #objective_scorer = scorer_factory.get_float_threshold_azure_content_filter_scorer(
-    #   api_key=config_loader._content_filter_key,
-    #   full_endpoint=config_loader._content_filter_endpoint,
-    #   threshold=0.6)
-
-    # TODO to be inverted with TrueFalseInverterScorer
-    objective_scorer=scorer_factory.get_self_ask_refusal_scorer(target_checking_refusal=objective_target)
-    # objective_scorer=scorer_factory.get_self_ask_likert_scorer(target=objective_target)
 
     scores_and_responses = await scoring_manager.score_results(
         scorer=objective_scorer,
@@ -187,14 +177,28 @@ async def run_tests(config):
     test_session_name = f"test_session_{len(datasets)}_datasets_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
     logger.info(f"\n\n**** Running test session {test_session_name} with {len(datasets)} datasets ****")
 
-    # TODO Target and Scorer can be instantiated here and passed to each test (dataset)
-    # target_llm and scorer should be built from config (e.g. OpenAIChatTarget and SelfAskRefusalScorer)
+    # TODO target_llm and scorer should be built from config (e.g. OpenAIChatTarget and SelfAskRefusalScorer)
     # target_llm = config["target_llm"]
     # scorers = config["scorers"]
+    objective_target = OpenAIChatTarget(
+        endpoint=config_handler._openai_full_endpoint,
+        api_key=config_handler._openai_api_key,
+        model_name=config_handler._openai_deployment,
+        api_version=config_handler._openai_api_version
+    )
+
+    #objective_scorer = scorer_factory.get_float_threshold_azure_content_filter_scorer(
+    #   api_key=config_loader._content_filter_key,
+    #   full_endpoint=config_loader._content_filter_endpoint,
+    #   threshold=0.6)
+
+    # TODO to be inverted with TrueFalseInverterScorer
+    objective_scorer=scorer_factory.get_self_ask_refusal_scorer(target_checking_refusal=objective_target)
+    # objective_scorer=scorer_factory.get_self_ask_likert_scorer(target=objective_target)
 
     elapsed_per_dataset = {}
     for dataset in datasets:
-        elapsed_per_dataset[dataset] = await run_dataset(dataset_name=dataset) # target_llm, scorers)
+        elapsed_per_dataset[dataset] = await run_dataset(dataset_name=dataset, objective_target=objective_target, objective_scorer=objective_scorer)
 
     logger.info(f"Time elapsed per dataset: {json.dumps(elapsed_per_dataset)}")
     logger.info(f"**** Finished test session {test_session_name} ****")
