@@ -90,11 +90,11 @@ def peek_scores_in_memory(*, memory: MemoryInterface, scores_and_responses: Sequ
 async def run_dataset(*,
         dataset_name: str,
         objective_target: OpenAIChatTarget,
-        objective_scorer: Scorer
+        objective_scorer: Scorer,
+        memory_manager: MemoryManager
     ):
     test_name = f"{dataset_name}_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
     logger.info(f"\n\n**** Running test {test_name} ****")
-    memory_manager = MemoryManager()
     memory = memory_manager.get_memory()
     # Configure the labels you want to send, these should be unique to this test to make it easier to retrieve
     memory_labels = {
@@ -113,6 +113,7 @@ async def run_dataset(*,
     await memory.add_seed_prompts_to_memory_async(prompts=seed_prompts, added_by="pyrit_test_framework")
     prompt_list = get_prompt_list(seed_prompts=seed_prompts)
 
+    '''
     ##### SETUP ORCHESTRATOR AND SEND PROMPTS TO TARGET LLM #####
     # We support only single-turn attacks with prompts firing
     orchestrator = orchestrator_factory.get_prompt_sending_orchestrator(target=objective_target)
@@ -166,7 +167,7 @@ async def run_dataset(*,
     reporting.save_prompt_results_to_csv(results=prompt_results, compact=True, test_name=test_name)
     #reporting.dump_debug_log(memory=memory)
     #reporting.dump_to_json(memory=memory)
-
+    '''
     logger.info(f"**** Finished test {test_name} ****")
 
 # ---- Main Entry ----
@@ -176,6 +177,9 @@ async def run_tests(config):
     logger.debug(f"Datasets loaded from config: {datasets}")
     test_session_name = f"test_session_{len(datasets)}_datasets_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
     logger.info(f"\n\n**** Running test session {test_session_name} with {len(datasets)} datasets ****")
+
+    # manage pyrit memory
+    memory_manager = MemoryManager()
 
     # TODO target_llm and scorer should be built from config (e.g. OpenAIChatTarget and SelfAskRefusalScorer)
     # target_llm = config["target_llm"]
@@ -198,7 +202,11 @@ async def run_tests(config):
 
     elapsed_per_dataset = {}
     for dataset in datasets:
-        elapsed_per_dataset[dataset] = await run_dataset(dataset_name=dataset, objective_target=objective_target, objective_scorer=objective_scorer)
+        elapsed_per_dataset[dataset] = await run_dataset(
+            dataset_name=dataset,
+            objective_target=objective_target,
+            objective_scorer=objective_scorer,
+            memory_manager=memory_manager)
 
     logger.info(f"Time elapsed per dataset: {json.dumps(elapsed_per_dataset)}")
     logger.info(f"**** Finished test session {test_session_name} ****")
