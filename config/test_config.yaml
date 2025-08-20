@@ -1,16 +1,22 @@
 datasets:
-  - "harmbench"
-  #- "darkbench"
-  #- "illegal"
-  #- "forbidden"
-  #- "librai"
-  #- "bias"
+  external:
+    - harmbench
+    #- darkbench # it doesn't seem helpful in our context
+    #- illegal
+    - forbidden
+    #- librai
+    #- bias
+  custom:
+   dir: "dataset/custom"
+   values:
+    #- prompts.yaml
 
-scorer:
-  "name": "self_ask_refusal"
-
-orchestrator:
-  "name": "prompt_sending"
+system_prompt:
+ dir: "config/system_prompts"
+ value: children_safe_prompt_eng.txt
 
 output:
   dir: "results"
+
+logging:
+  level: "DEBUG"

@@ -1,15 +1,9 @@
-from logging_handler import logger
-
 import yaml
 from dotenv import load_dotenv
+from pathlib import Path
 import os
 
-## Prepended prompts
-_SYSTEM_PROMPTS_PATH = "config/system_prompts/"
-EXAMPLE_SAFE_PROMPT='example_safe_prompt.txt'
-CHILDREN_SAFE_PROMPT_ENG='children_safe_prompt_eng.txt'
-CHILDREN_SAFE_PROMPT_ITA='children_safe_prompt_ita.txt'
-VERIFICATION_PROMPT='verification_prompt.txt'
+_TEST_CONFIG = None
 
 load_dotenv()
 
@@ -28,26 +22,10 @@ _openai_api_version=os.getenv(_AZURE_OPENAI_API_VERSION)
 _openai_full_endpoint = f"{_openai_endpoint}/openai/deployments/{_openai_deployment}/chat/completions?api-version={_openai_api_version}"
 ##END OPENAI CONFIGS
 
-### TODO MOVE to SEPARATE CLASS ###
-## AZURE CONTENT FILTER API CONFIGS
-_AZURE_CONTENT_FILTER_ENDPOINT="AZURE_CONTENT_FILTER_ENDPOINT"
-_AZURE_CONTENT_FILTER_API_KEY="AZURE_CONTENT_FILTER_API_KEY"
-_AZURE_CONTENT_FILTER_DEPLOYMENT="AZURE_CONTENT_FILTER_DEPLOYMENT"
-_AZURE_CONTENT_FILTER_API_VERSION="AZURE_CONTENT_FILTER_API_VERSION"
-
-_content_filter_endpoint=os.getenv(_AZURE_CONTENT_FILTER_ENDPOINT)
-_content_filter_key=os.getenv(_AZURE_CONTENT_FILTER_API_KEY)
-_content_filter_deployment=os.getenv(_AZURE_CONTENT_FILTER_DEPLOYMENT)
-_content_filter_api_version=os.getenv(_AZURE_CONTENT_FILTER_API_VERSION)
-
-_content_filter_full_endpoint = f"{_content_filter_endpoint}/openai/deployments/{_content_filter_deployment}/chat/completions?api-version={_content_filter_api_version}"
-## END AZURE CONTENT FILTER API CONFIGS'''
-
-
-TEST_CONFIG_PATH = "config/test_config.yaml"
-
+TEST_CONFIG_PATH = Path("config") / "test_config.yaml"
 
 def load_dotenv_with_check():
+    from logging_handler import logger
     ok_dotenv = load_dotenv()  # Load .env file into environment
     if ok_dotenv:
         logger.debug('Succesfully loaded test framework .env')
@@ -63,26 +41,23 @@ def load_openai_configs():
     _openai_api_version=os.getenv(_AZURE_OPENAI_API_VERSION)
     _openai_full_endpoint = f"{_openai_endpoint}/openai/deployments/{_openai_deployment}/chat/completions?api-version={_openai_api_version}"
 
-    ##AZURE CONTENT FILTER API CONFIGS##
-    _content_filter_endpoint=os.getenv(_AZURE_CONTENT_FILTER_ENDPOINT)
-    _content_filter_key=os.getenv(_AZURE_CONTENT_FILTER_API_KEY)
-    _content_filter_deployment=os.getenv(_AZURE_CONTENT_FILTER_DEPLOYMENT)
-    _content_filter_api_version=os.getenv(_AZURE_CONTENT_FILTER_API_VERSION)
-    _content_filter_full_endpoint = f"{_openai_endpoint}/openai/deployments/{_openai_deployment}/chat/completions?api-version={_openai_api_version}"
+def load_test_config(config_path: Path = TEST_CONFIG_PATH) -> dict:
+    with config_path.open('r') as file:
+        _TEST_CONFIG = yaml.safe_load(file)
+        return _TEST_CONFIG
 
-
-def load_test_config(config_path: str = TEST_CONFIG_PATH) -> dict:
-    with open(config_path, 'r') as file:
-        return yaml.safe_load(file)
+def get_test_config(config_path: str = TEST_CONFIG_PATH) -> dict:
+    return _TEST_CONFIG if _TEST_CONFIG else load_test_config(config_path=config_path)
 
 def load_all_configs():
     load_dotenv_with_check()
     load_openai_configs()
     return load_test_config()
 
-def load_system_prompt(prompt_name: str=EXAMPLE_SAFE_PROMPT):
+def load_system_prompt(prompt_name: str=get_test_config()['system_prompt']['value']):
     '''
     Remove any newline/cr characters
     '''
-    with open(_SYSTEM_PROMPTS_PATH + prompt_name) as file:
+    sys_prompt_full_path = Path(get_test_config()['system_prompt']['dir']) / prompt_name
+    with sys_prompt_full_path.open('r') as file:
         return file.read().replace('\n', '').replace('\r', '')

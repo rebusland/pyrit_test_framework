@@ -23,7 +23,7 @@ def peek_dataset_info(dataset: SeedPromptDataset):
     logger.debug(f"Dataset authors:' + {dataset.authors}")
     logger.debug(f"Dataset harm categories: {dataset.harm_categories}")
     logger.debug(f"Dataset total number of prompts: {len(dataset.prompts)}")
-    logger.debug(f"Dataset Seed prompts (first 3 examples):\n {dataset.get_values()[:3]}\n")
+    logger.debug(f"Dataset Seed prompts (first 3 examples):\n {dataset.get_values()[:3] if len(dataset.get_values()) >= 3 else dataset.get_values()}\n")
     logger.debug(f"Dataset prompt groups: {dataset.groups}")
 
 def enrich_dataset_info(dataset: SeedPromptDataset) -> None:

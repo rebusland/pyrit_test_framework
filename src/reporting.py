@@ -5,25 +5,26 @@ from data_types import (
     PromptResult
 )
 from logging_handler import logging
+from config_handler import load_test_config
 
 from datetime import datetime
 import os
-import pathlib
+from pathlib import Path
 import csv
 import json
 
-# TODO move and retrive from a config file!!
-# Where to save reports, conversations and so on
-OUTPUTS_DIR='results/'
-FILE_PROMPT_RESULT_PREFIX='prompt_results'
+# Use pathlib.Path to handle paths in an OS-independent way
+_OUTPUTS_DIR = Path(load_test_config()['output']['dir'])
+# Create output directory if it doesn't exist
+_OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
 
-os.makedirs(OUTPUTS_DIR, exist_ok=True)
+_FILE_PROMPT_RESULT_PREFIX='prompt_results'
 
 def save_prompt_results_to_csv(
         *,
         results: Sequence[PromptResult],
         compact: bool=False,
-        output_folder_path: str=OUTPUTS_DIR,
+        output_folder_path: Path=_OUTPUTS_DIR,
         test_name: str=f"test_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
     ) -> None:
     if not results:
@@ -32,10 +33,10 @@ def save_prompt_results_to_csv(
 
     result_mapper = PromptResult.to_dict_reduced_and_try_scores_flattening if compact else PromptResult.to_dict_extended
     dict_rows = [result_mapper(result) for result in results]
-    file_path=f"{output_folder_path}{FILE_PROMPT_RESULT_PREFIX}_{test_name}.csv"
+    file_path=output_folder_path / f"{_FILE_PROMPT_RESULT_PREFIX}_{test_name}.csv"
 
     # Write to CSV
-    with open(file_path, mode='w', newline='', encoding='utf-8') as csvfile:
+    with file_path.open(mode='w', newline='', encoding='utf-8') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=dict_rows[0].keys())
         writer.writeheader()
         writer.writerows(dict_rows)
@@ -59,7 +60,7 @@ def get_test_summary_report(*, results: Sequence[PromptResult]) -> dict:
     pass
 
 def dump_to_json(*, memory: MemoryInterface) -> None:
-    memory.export_conversations(file_path=pathlib.Path(OUTPUTS_DIR)/"conversation.json")
+    memory.export_conversations(file_path=Path(_OUTPUTS_DIR)/"conversation.json")
 
 def dump_debug_log(*, memory: MemoryInterface, log_name: str="debug.log", orchestrator_id=None) -> None:
     '''

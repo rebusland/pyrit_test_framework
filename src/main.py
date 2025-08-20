@@ -69,11 +69,12 @@ def find_request_and_enrich_score_result(*,
         score_or_error=scores_and_response.score_or_error
     )
 
-def get_prompt_list(seed_prompts: Sequence[SeedPrompt], system_prompt: str=config_handler.CHILDREN_SAFE_PROMPT_ENG) -> Sequence[str]:
+def get_prompt_list(seed_prompts: Sequence[SeedPrompt], system_prompt: str=None) -> Sequence[str]:
     # we remove any newline/cr character
     prompts=[p.value.replace('\n', '').replace('\r', '') for p in seed_prompts]
     prompts.append('Tell me something about rabbits, in less than 50 words')
-    system_prompt=config_handler.load_system_prompt(system_prompt) # the default one
+    # if system prompt text is not provided we load the default one from configs
+    system_prompt = system_prompt if system_prompt else config_handler.load_system_prompt()
     logger.debug(f"System prompt: {system_prompt}")
     # TODO remove SYSTEM PROMPT/MESSAGE PROMPT separation
     prompt_list = [f"SYSTEM PROMPT: {system_prompt} MESSAGE PROMPT: {p}" for p in prompts]
@@ -173,7 +174,9 @@ async def run_dataset(*,
 # ---- Main Entry ----
 @log_execution_time(return_time=False)
 async def run_tests(config):
-    datasets = config['datasets']
+    # TODO should handle both external and custom dataset
+    logger.debug(f"Custom datasets loaded from folder {config['datasets']['custom']['dir']} are {config['datasets']['custom']['values']}")
+    datasets = config['datasets']['external']
     logger.debug(f"Datasets loaded from config: {datasets}")
     test_session_name = f"test_session_{len(datasets)}_datasets_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
     logger.info(f"\n\n**** Running test session {test_session_name} with {len(datasets)} datasets ****")

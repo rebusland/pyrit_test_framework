@@ -1,8 +1,10 @@
 import logging
 from typing import Any, Sequence
 
+from config_handler import load_test_config
+
 # TODO get severity level from config file
-LOG_LEVEL = logging.DEBUG
+LOG_LEVEL = getattr(logging, load_test_config()['logging']['level'].upper(), logging.INFO)
 
 # Configure logging
 logging.basicConfig(
@@ -10,9 +12,9 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
 logger = logging.getLogger(__name__)
+logger.debug(f"Logger level set to {logging.getLevelName(LOG_LEVEL)}")
 
 from utils import run_only_if_log_level_debug
-
 @run_only_if_log_level_debug()
 def peek_iterable(
     *,
