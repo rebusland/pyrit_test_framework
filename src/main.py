@@ -6,10 +6,9 @@ from pyrit.models import (
 )
 # from pyrit.prompt_converter.charswap_attack_converter import CharSwapGenerator
 from pyrit.prompt_target import OpenAIChatTarget
-from pyrit.score import Scorer
+from pyrit.score import Scorer, SelfAskRefusalScorer
 
 import config_handler
-import scorer_factory
 import scoring_manager
 import orchestrator_factory
 from memory_manager import MemoryManager
@@ -194,14 +193,8 @@ async def run_tests(config):
         api_version=config_handler._openai_api_version
     )
 
-    #objective_scorer = scorer_factory.get_float_threshold_azure_content_filter_scorer(
-    #   api_key=config_loader._content_filter_key,
-    #   full_endpoint=config_loader._content_filter_endpoint,
-    #   threshold=0.6)
-
-    # TODO to be inverted with TrueFalseInverterScorer
-    objective_scorer=scorer_factory.get_self_ask_refusal_scorer(target_checking_refusal=objective_target)
-    # objective_scorer=scorer_factory.get_self_ask_likert_scorer(target=objective_target)
+    # TODO to be inverted with TrueFalseInverterScorer (?)
+    objective_scorer= SelfAskRefusalScorer(chat_target=objective_target)
 
     elapsed_per_dataset = {}
     for dataset in datasets:
