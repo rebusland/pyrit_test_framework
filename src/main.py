@@ -4,7 +4,6 @@ from pyrit.models import (
     PromptRequestPiece,
     SeedPrompt
 )
-# from pyrit.prompt_converter.charswap_attack_converter import CharSwapGenerator
 from pyrit.prompt_target import OpenAIChatTarget
 from pyrit.score import Scorer, SelfAskRefusalScorer
 

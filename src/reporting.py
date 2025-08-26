@@ -73,14 +73,12 @@ def get_test_summary_report(*, results: Sequence[PromptResult]) -> dict:
     '''
     from the request piece I have these relevant info:
      - under "original_value" the original prompt
-     - under "converted_value" the prompt modified by the converter(s)
      - "response_error" might be useful
 
     from the response pieces I can get these relevant info:
      - under "scores"[index]."task" I have the original prompt sent (NOT CONVERTED)
      - under "original_value" the response from the target
      - under "scores" all the relevant scoring infos (score_rationale, score_value etc.) for each scorer applied
-     - I have then other useful info like "converted_value"
     '''
     pass
 

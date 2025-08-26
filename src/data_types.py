@@ -243,7 +243,6 @@ class CompactScoreResult:
 class PromptResult(NamedTuple):
     id: uuid.UUID | str
     original_prompt: str
-    converted_prompt: Optional[str]
     target_response: Optional[str]
     # TODO unpack?? or create a dictionary scorer_type: scoring_results?
     scores_or_error: ScoresOrError
@@ -254,19 +253,16 @@ class PromptResult(NamedTuple):
         Extract relevant infos from the req/resp/scores (original prompt, target response, scoring metrics etc.)
         From the request piece we have these relevant info:
         - under "original_value" the original prompt
-        - under "converted_value" the prompt modified by the converter(s)
         - "response_error" might be useful
 
         From the response pieces we can get these relevant info:
         - under "scores"[index]."task" I have the original prompt sent (NOT CONVERTED)
         - under "original_value" the response from the target
         - under "scores" all the relevant scoring infos (score_rationale, score_value etc.) for each scorer applied
-        - We then have other useful info like "converted_value"
         '''
         return PromptResult(
             id=fat_scoring_res.prompt_request.conversation_id,
             original_prompt=fat_scoring_res.prompt_request.original_value,
-            converted_prompt=fat_scoring_res.prompt_request.converted_value,
             target_response=fat_scoring_res.prompt_response.original_value,
             scores_or_error=fat_scoring_res.score_or_error
         )
@@ -279,7 +275,6 @@ class PromptResult(NamedTuple):
         return PromptResult(
             id=row["id"],
             original_prompt=row["original_prompt"],
-            converted_prompt=row.get("converted_prompt"),
             target_response=row.get("target_response"),
             scores_or_error=ScoresOrError.from_dict(json.loads(row["scores"].strip()), compact=compact)
         )
@@ -295,7 +290,6 @@ class PromptResult(NamedTuple):
             "scores": scores_error_mapper(self.scores_or_error)
         }
         if extended:
-            out["converted_prompt"] = self.converted_prompt
             out["target_response"] = self.target_response
 
         return out
