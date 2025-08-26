@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import Dict, Sequence
 from pyrit.memory import MemoryInterface
 
 from data_types import (
@@ -29,7 +29,7 @@ def save_prompt_results_to_csv(
         test_name: str=f"test_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
     ) -> None:
     '''
-    flat: bool -> produces a slim report with just what's needed for business.
+    flat: bool -> produces a slim dump of the results with just what's needed for business.
     compact: bool -> whether results should be complete (extended) or reduced. It has effect only if flat=False. To be use for getting "under the hood" info of each prompt evaluation.
     '''
     if not results:
@@ -77,19 +77,6 @@ def load_results_from_csv(*,
         for row in reader:
             results.append(PromptResult.from_dict(row, compact=compact))
     return results
-
-def get_test_summary_report(*, results: Sequence[PromptResult]) -> dict:
-    '''
-    from the request piece I have these relevant info:
-     - under "original_value" the original prompt
-     - "response_error" might be useful
-
-    from the response pieces I can get these relevant info:
-     - under "scores"[index]."task" I have the original prompt sent (NOT CONVERTED)
-     - under "original_value" the response from the target
-     - under "scores" all the relevant scoring infos (score_rationale, score_value etc.) for each scorer applied
-    '''
-    pass
 
 def dump_to_json(*, memory: MemoryInterface) -> None:
     memory.export_conversations(file_path=Path(_OUTPUTS_DIR)/"conversation.json")

@@ -9,9 +9,11 @@ from collections import namedtuple
 from enum import Enum
 import json
 import uuid
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from enum import Enum
+
+import utils
 
 class PromptRequestPieceType(Enum):
     REQUEST = 'request'
@@ -339,3 +341,77 @@ class PromptResult(NamedTuple):
 
     def __str__(self):
         return json.dumps(self.to_dict())
+
+
+@dataclass
+class SingleTestSummary:
+    '''
+    Synthetic summary for the evaluation of a single dataset.
+    - single dataset test name
+    - number of prompts fired
+    - total number of tokens fired (total number of words)
+    - number of jailbreaks
+    - percentage jailbreaks
+    - number of response errors (prompt response receival or response scoring failed for technical reasons)
+    - time taken to evaluate the dataset
+    '''
+    test_label: str
+    num_prompts: int
+    num_tokens: int
+    num_jailbreaks: int
+    perc_jailbreaks: float
+    num_response_error: int
+    elapsed: str # use utils.format_duration to convert from seconds to nice str representation
+
+    def __init__(self, *, results: Sequence[PromptResult], label: str = 'single_label', elapsed: float):
+        self.test_label = label
+        # ... TODO
+        self.num_prompts = len(results)
+        self.elapsed = utils.format_duration(elapsed)
+
+    def to_dict(self) -> Dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: Dict):
+        return cls(**d)
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict())
+
+    @classmethod
+    def from_json(cls, s: str):
+        return cls.from_dict(json.loads(s))
+
+@dataclass
+class CompositeTestSummary:
+    '''
+    The full summary report for the complete test (multiple datasets)
+    '''
+    single_summaries: Sequence[SingleTestSummary]
+    composite_summary: SingleTestSummary # The "summary of the summaries"
+
+    def __init__(self, single_summaries: Sequence[SingleTestSummary]):
+        if not single_summaries:
+            raise ValueError('No list of summaries was provided to build a composite summary')
+        self.single_summaries = single_summaries
+
+        if len(single_summaries) == 1:
+            self.composite_summary = single_summaries[0]
+        else:
+            # ... TODO
+            self.composite_summary = single_summaries[0]
+
+    def to_dict(self) -> Dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: Dict):
+        return cls(**d)
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict())
+
+    @classmethod
+    def from_json(cls, s: str):
+        return cls.from_dict(json.loads(s))

@@ -22,7 +22,7 @@ def run_if_log_level_at_most(level: int):
         return wrapper
     return decorator
 
-def _format_duration(seconds: float) -> str:
+def format_duration(seconds: float) -> str:
     """Format seconds into H:MM:SS.sss."""
     hours, remainder = divmod(int(seconds), 3600)
     minutes, secs = divmod(remainder, 60)
@@ -42,7 +42,7 @@ def log_execution_time(return_time: bool = False, level: int = logging.INFO):
                 start = time.perf_counter()
                 result = await func(*args, **kwargs)
                 elapsed = time.perf_counter() - start
-                logger.log(level, f"{func.__name__} took {_format_duration(elapsed)}")
+                logger.log(level, f"{func.__name__} took {format_duration(elapsed)}")
                 return (result, elapsed) if return_time else result
             return wrapper
         else:
@@ -51,7 +51,7 @@ def log_execution_time(return_time: bool = False, level: int = logging.INFO):
                 start = time.perf_counter()
                 result = func(*args, **kwargs)
                 elapsed = time.perf_counter() - start
-                logger.log(level, f"{func.__name__} took {_format_duration(elapsed)}")
+                logger.log(level, f"{func.__name__} took {format_duration(elapsed)}")
                 return (result, elapsed) if return_time else result
             return wrapper
     return decorator
