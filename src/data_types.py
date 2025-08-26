@@ -176,7 +176,7 @@ class FattenedScoringResult:
 @dataclass
 class CompactScoreResult:
     '''
-    A more "flattened" and simplified version of the pyrit Score class.add.
+    A more "flattened" and simplified version of the pyrit Score class.
     '''
     score_value: bool
     score_value_description: str
@@ -320,6 +320,22 @@ class PromptResult(NamedTuple):
             )
         
         return self.to_dict_reduced()
+
+    def to_dict_flat(self) -> Dict[str, Any]:
+        '''
+        Just what's needed for business, useful for producing neat csv results to filter in excel.
+        If the score was an error, None is set to all the fields.
+        NB the scores results for each request are assumed to be one (it should always be like so)
+        and the scoring results (if valid) are then flattened.
+        '''
+        valid_score = self.scores_or_error.unwrap()[0] if self.scores_or_error.is_success() else None
+        return {
+            "id": self.id,
+            "original_prompt": self.original_prompt,
+            "score_value": valid_score.score_value if valid_score else None,
+            "score_rationale": valid_score.score_rationale if valid_score else None,
+            "score_timestamp": valid_score.timestamp.isoformat() if valid_score else None
+        }
 
     def __str__(self):
         return json.dumps(self.to_dict())

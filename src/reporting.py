@@ -23,21 +23,30 @@ _FILE_PROMPT_RESULT_PREFIX='prompt_results'
 def save_prompt_results_to_csv(
         *,
         results: Sequence[PromptResult],
-        compact: bool=False,
+        flat: bool=True, # slim business representation
+        compact: bool=False, # it has effect only if flat=False
         results_subfolder: str='',
         test_name: str=f"test_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
     ) -> None:
+    '''
+    flat: bool -> produces a slim report with just what's needed for business.
+    compact: bool -> whether results should be complete (extended) or reduced. It has effect only if flat=False. To be use for getting "under the hood" info of each prompt evaluation.
+    '''
     if not results:
         print("No data to write.")
         return
 
-    result_mapper = PromptResult.to_dict_reduced if compact else PromptResult.to_dict_extended
-    dict_rows = [result_mapper(result) for result in results]
+    dict_rows = {}
+    if flat:
+        dict_rows = [result.to_dict_flat() for result in results]
+    else:
+        result_mapper = PromptResult.to_dict_reduced if compact else PromptResult.to_dict_extended
+        dict_rows = [result_mapper(result) for result in results]
 
-    # Convert JSON-like fields into proper JSON strings
-    for row in dict_rows:
-        if isinstance(row.get("scores"), (dict, list)):
-            row["scores"] = json.dumps(row["scores"], ensure_ascii=False)
+        # Convert JSON-like fields into proper JSON strings
+        for row in dict_rows:
+            if isinstance(row.get("scores"), (dict, list)):
+                row["scores"] = json.dumps(row["scores"], ensure_ascii=False)
 
     base_dir = _OUTPUTS_DIR / results_subfolder if results_subfolder else _OUTPUTS_DIR
     # Create output directory if it doesn't exist
