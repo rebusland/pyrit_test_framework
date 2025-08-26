@@ -108,12 +108,11 @@ async def run_dataset(*,
     dataset = load_dataset(dataset_name=dataset_name)
     peek_dataset_info(dataset=dataset)
 
-    seed_prompts = dataset.prompts[:3]
+    seed_prompts = dataset.prompts[:2]
     logger.info(f"\n\n\nPrompt dataset {dataset_name} loaded, preparing {len(seed_prompts)} prompts to send\n")
     await memory.add_seed_prompts_to_memory_async(prompts=seed_prompts, added_by="pyrit_test_framework")
     prompt_list = get_prompt_list(seed_prompts=seed_prompts)
 
-    '''
     ##### SETUP ORCHESTRATOR AND SEND PROMPTS TO TARGET LLM #####
     # We support only single-turn attacks with prompts firing
     orchestrator = orchestrator_factory.get_prompt_sending_orchestrator(target=objective_target)
@@ -164,10 +163,10 @@ async def run_dataset(*,
 
     ##### SAVE AND REPORT TEST RESULTS #####
     logger.info('Saving prompt results and producing test report')
-    reporting.save_prompt_results_to_csv(results=prompt_results, compact=True, test_name=test_name)
+    reporting.save_prompt_results_to_csv(results=prompt_results, results_subfolder=dataset_name, test_name=test_name)
     #reporting.dump_debug_log(memory=memory)
     #reporting.dump_to_json(memory=memory)
-    '''
+
     logger.info(f"**** Finished test {test_name} ****")
 
 # ---- Main Entry ----
@@ -211,5 +210,6 @@ if __name__ == "__main__":
     try:
         conf = config_handler.load_all_configs()
         asyncio.run(run_tests(config=conf))
+
     except Exception as e:
         logger.critical(f"Unhandled exception: {e}", exc_info=True)

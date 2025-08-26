@@ -4,7 +4,7 @@ from pyrit.models import (
     ScoreType
 )
 
-from typing import Any, Callable, NamedTuple, Optional, Sequence
+from typing import Any, Callable, Dict, NamedTuple, Optional, Sequence
 from collections import namedtuple
 from enum import Enum
 import json
@@ -18,11 +18,59 @@ class PromptRequestPieceType(Enum):
     RESPONSE = 'response'
     OTHER = 'other' # this might be system messages (?)
 
-class Scorer(Enum):
+def score_from_dict(input_dict: Dict[str, Any]) -> Score:
     """
-    The scorers we support from PyRIT: 
+    Deserialize a dictionary (parsed from JSON) into a Score object.
     """
-    SelfAskRefusalScorer='SelfAskRefusalScorer'
+    # Normalize ID
+    score_id = input_dict.get("id")
+    if score_id:
+        try:
+            score_id = uuid.UUID(str(score_id))
+        except Exception:
+            score_id = str(score_id)
+
+    # Normalize prompt_request_response_id
+    prr_id = input_dict.get("prompt_request_response_id")
+    if prr_id:
+        try:
+            prr_id = uuid.UUID(str(prr_id))
+        except Exception:
+            prr_id = str(prr_id)
+
+    # Normalize timestamp
+    ts = input_dict.get("timestamp")
+    if ts:
+        try:
+            ts = datetime.fromisoformat(ts)
+        except Exception:
+            ts = None
+
+    # Ensure metadata can be None or dict -> str
+    metadata = input_dict.get("score_metadata")
+    if metadata is None:
+        metadata = ""
+
+    # Ensure scorer_class_identifier is always dict
+    sci = input_dict.get("scorer_class_identifier") or {}
+
+    # Normalize score_value: must be string because Score.validate expects "true"/"false" or float
+    score_value = str(input_dict.get("score_value"))
+
+    # Build Score
+    return Score(
+        id=score_id,
+        score_value=score_value,
+        score_value_description=input_dict.get("score_value_description", ""),
+        score_type=input_dict.get("score_type"),
+        score_category=input_dict.get("score_category", ""),
+        score_rationale=input_dict.get("score_rationale", ""),
+        score_metadata=metadata,
+        scorer_class_identifier=sci,
+        prompt_request_response_id=prr_id,
+        timestamp=ts,
+        task=input_dict.get("task")
+    )
 
 @dataclass
 class ScoresOrError:
@@ -54,6 +102,24 @@ class ScoresOrError:
         if self.scores is None:
             raise ValueError("No scores present despite success status")
         return self.scores
+
+    @staticmethod
+    def from_dict(d: dict[str, Any], compact: bool=False) -> "ScoresOrError":
+        if "error" in d:
+            # Try to rebuild the error as a generic Exception with its message
+            err_dict = d["error"]
+            msg = err_dict.get("args", ["Unknown error"])[0] if isinstance(err_dict, dict) else str(err_dict)
+            return ScoresOrError.from_error(Exception(msg))
+
+        if "scores" in d:
+            scores=[]
+            if compact:
+                scores = [CompactScoreResult.from_dict(s).to_score() for s in d["scores"]]
+            else:
+                scores = [score_from_dict(s) for s in d["scores"]]
+            return ScoresOrError.from_scores(scores)
+
+        raise ValueError(f"Invalid dictionary for ScoresOrError: {d}")
 
     def to_dict(self):
         if self.error:
@@ -118,7 +184,7 @@ class CompactScoreResult:
     score_category: str
     score_rationale: str
     score_timestamp: datetime
-    scorer: Scorer
+    scorer: str
 
     @staticmethod
     def from_valid_score(score: Score) -> 'CompactScoreResult':
@@ -129,7 +195,35 @@ class CompactScoreResult:
             score_category=score.score_category,
             score_rationale=score.score_rationale,
             score_timestamp=score.timestamp,
-            scorer=Scorer(score.scorer_class_identifier['__type__'])
+            scorer=score.scorer_class_identifier['__type__']
+        )
+
+    def to_score(self) -> Score:
+        '''
+        Uses the partial information in CompactScoreResult to build as best as it can a pyrit Score object.
+        '''
+        return Score(
+            id='', # not available in CompactScoreResult
+            score_value=self.score_value,
+            score_value_description=self.score_value_description,
+            score_type=self.score_type,
+            score_category=self.score_category,
+            score_rationale=self.score_rationale,
+            score_metadata='', # not available in CompactScoreResult
+            scorer_class_identifier={"__type__": self.scorer},
+            prompt_request_response_id='', # not available in CompactScoreResult
+        )
+
+    @staticmethod
+    def from_dict(d: dict) -> "CompactScoreResult":
+        return CompactScoreResult(
+            score_value=bool(d["score_value"]),
+            score_value_description=d["score_value_description"],
+            score_type=d["score_type"],
+            score_category=d["score_category"],
+            score_rationale=d["score_rationale"],
+            score_timestamp=datetime.fromisoformat(d["score_timestamp"]) if isinstance(d["score_timestamp"], str) else d["score_timestamp"],
+            scorer=d["scorer"],
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -140,7 +234,7 @@ class CompactScoreResult:
             "score_category": self.score_category,
             "score_rationale": self.score_rationale,
             "score_timestamp": self.score_timestamp.isoformat(),
-            "scorer": self.scorer.value
+            "scorer": self.scorer
         }
 
     def __str__(self):
@@ -177,9 +271,22 @@ class PromptResult(NamedTuple):
             scores_or_error=fat_scoring_res.score_or_error
         )
 
+    @staticmethod
+    def from_dict(row: dict[str, str], compact: bool=False) -> "PromptResult":
+        """
+        Convert a CSV row (as dict) into a PromptResult.
+        """
+        return PromptResult(
+            id=row["id"],
+            original_prompt=row["original_prompt"],
+            converted_prompt=row.get("converted_prompt"),
+            target_response=row.get("target_response"),
+            scores_or_error=ScoresOrError.from_dict(json.loads(row["scores"].strip()), compact=compact)
+        )
+
     def to_dict(self, *,
             extended: bool=True,
-            scores_error_mapper: Callable[[ScoresOrError], Sequence[Any] | dict] = lambda s: s.to_dict()
+            scores_error_mapper: Callable[[ScoresOrError], dict] = lambda s: s.to_dict()
         ) -> dict[str, Any]:
 
         out = {
@@ -197,19 +304,26 @@ class PromptResult(NamedTuple):
         return self.to_dict(extended=True)
 
     def to_dict_reduced(self) -> dict[str, Any]:
+        def scores_error_mapper(s_e: ScoresOrError):
+            if s_e.is_error():
+                return {"error": s_e.to_dict()}
+            return {"scores": [CompactScoreResult.from_valid_score(s).to_dict() for s in s_e.unwrap()]}
+
         return self.to_dict(
             extended=False,
-            scores_error_mapper=lambda scores_or_error: 
-            [CompactScoreResult.from_valid_score(s).to_dict() for s in scores_or_error.unwrap()] if scores_or_error.is_success() else scores_or_error.to_dict()                
+            scores_error_mapper=scores_error_mapper
         )
 
     def to_dict_reduced_and_try_scores_flattening(self) -> dict[str, Any]:
         '''
+        TODO add complexity. Maybe it's better to deprecate (not uniform serialization/deserialization if single or multiple scores)
         Check if scores is actually one element (typical): if so the dictionary representation of scores is replaced with a plain dict instead of a list
         '''
         if self.scores_or_error.is_success() and len(self.scores_or_error.unwrap()) == 1:
-            return self.to_dict(extended=False,
-                scores_error_mapper= lambda sc_err : CompactScoreResult.from_valid_score(sc_err.unwrap()[0]).to_dict())
+            return self.to_dict(
+                extended=False,
+                scores_error_mapper= lambda sc_err : {"scores": CompactScoreResult.from_valid_score(sc_err.unwrap()[0]).to_dict()}
+            )
         
         return self.to_dict_reduced()
 

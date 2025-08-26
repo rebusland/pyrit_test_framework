@@ -3,7 +3,7 @@ datasets:
     - harmbench
     #- darkbench # it doesn't seem helpful in our context
     #- illegal
-    - forbidden
+    #- forbidden
     #- librai
     #- bias
   custom:

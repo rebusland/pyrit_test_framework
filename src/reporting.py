@@ -24,16 +24,25 @@ def save_prompt_results_to_csv(
         *,
         results: Sequence[PromptResult],
         compact: bool=False,
-        output_folder_path: Path=_OUTPUTS_DIR,
+        results_subfolder: str='',
         test_name: str=f"test_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
     ) -> None:
     if not results:
         print("No data to write.")
         return
 
-    result_mapper = PromptResult.to_dict_reduced_and_try_scores_flattening if compact else PromptResult.to_dict_extended
+    result_mapper = PromptResult.to_dict_reduced if compact else PromptResult.to_dict_extended
     dict_rows = [result_mapper(result) for result in results]
-    file_path=output_folder_path / f"{_FILE_PROMPT_RESULT_PREFIX}_{test_name}.csv"
+
+    # Convert JSON-like fields into proper JSON strings
+    for row in dict_rows:
+        if isinstance(row.get("scores"), (dict, list)):
+            row["scores"] = json.dumps(row["scores"], ensure_ascii=False)
+
+    base_dir = _OUTPUTS_DIR / results_subfolder if results_subfolder else _OUTPUTS_DIR
+    # Create output directory if it doesn't exist
+    base_dir.mkdir(parents=True, exist_ok=True)
+    file_path= base_dir / f"{_FILE_PROMPT_RESULT_PREFIX}_{test_name}.csv"
 
     # Write to CSV
     with file_path.open(mode='w', newline='', encoding='utf-8') as csvfile:
@@ -41,8 +50,24 @@ def save_prompt_results_to_csv(
         writer.writeheader()
         writer.writerows(dict_rows)
 
-def read_results_from_csv(*, file_name: str, compact: bool=False):
-    pass
+def load_results_from_csv(*,
+    file_name: str,
+    compact: bool=False,
+    output_subfolder: str,
+    ) -> Sequence[PromptResult]:
+    f_suffix = Path(file_name).suffix
+    if f_suffix and f_suffix != '.csv':
+        raise ValueError(f"{f_suffix} extension is not valid. Only results from csv files can be loaded")
+    fname = file_name if f_suffix else f"{file_name}.csv"
+    out_folder_path = _OUTPUTS_DIR if not output_subfolder else _OUTPUTS_DIR / output_subfolder 
+    file_path= out_folder_path / fname
+    
+    results: Sequence[PromptResult] = []
+    with file_path.open(encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            results.append(PromptResult.from_dict(row, compact=compact))
+    return results
 
 def get_test_summary_report(*, results: Sequence[PromptResult]) -> dict:
     '''
