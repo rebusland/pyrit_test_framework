@@ -46,6 +46,9 @@ def load_test_config(config_path: Path = TEST_CONFIG_PATH) -> dict:
         _TEST_CONFIG = yaml.safe_load(file)
         return _TEST_CONFIG
 
+def get_model_deployment():
+    return _openai_deployment
+
 def get_test_config(config_path: str = TEST_CONFIG_PATH) -> dict:
     return _TEST_CONFIG if _TEST_CONFIG else load_test_config(config_path=config_path)
 

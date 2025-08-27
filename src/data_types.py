@@ -13,6 +13,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from enum import Enum
 
+import config_handler
 import utils
 
 class PromptRequestPieceType(Enum):
@@ -363,10 +364,14 @@ class SingleTestSummary:
     num_response_error: int
     elapsed: str # use utils.format_duration to convert from seconds to nice str representation
 
-    def __init__(self, *, results: Sequence[PromptResult], label: str = 'single_label', elapsed: float):
+    def __init__(self, *, results: Sequence[PromptResult], label: str = 'single_label', elapsed: float=0.):
         self.test_label = label
-        # ... TODO
         self.num_prompts = len(results)
+        self.num_tokens = sum([utils.num_tokens_for_model(text=r.original_prompt, model_name=config_handler.get_model_deployment()) for r in results])
+        from scoring_manager import is_jailbreak
+        self.num_jailbreaks = sum([1 for r in results if r.scores_or_error.is_success() and is_jailbreak(r.scores_or_error.scores[0])])
+        self.perc_jailbreaks = self.num_jailbreaks / sum([1 for r in results if r.scores_or_error.is_success()])
+        self.num_response_error = sum([1 for r in results if r.scores_or_error.is_error()])
         self.elapsed = utils.format_duration(elapsed)
 
     def to_dict(self) -> Dict:
@@ -382,6 +387,9 @@ class SingleTestSummary:
     @classmethod
     def from_json(cls, s: str):
         return cls.from_dict(json.loads(s))
+
+    def __str__(self):
+        return self.to_json()
 
 @dataclass
 class CompositeTestSummary:
@@ -415,3 +423,6 @@ class CompositeTestSummary:
     @classmethod
     def from_json(cls, s: str):
         return cls.from_dict(json.loads(s))
+
+    def __str__(self):
+        return self.to_json()
