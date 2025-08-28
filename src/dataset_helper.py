@@ -8,8 +8,7 @@ from pyrit.datasets import (
     red_team_social_bias_dataset
 )
 
-from logging_handler import logger
-from utils import run_only_if_log_level_debug
+from logging_handler import logger, run_only_if_log_level_debug
 
 import pathlib
 from threading import Lock

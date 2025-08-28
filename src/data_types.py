@@ -357,29 +357,45 @@ class SingleTestSummary:
     - time taken to evaluate the dataset
     '''
     test_label: str
+    dataset_name: str
     num_prompts: int
     num_tokens: int
     num_jailbreaks: int
     num_prompts_sent: int
     perc_jailbreaks: float
     num_response_error: int
-    elapsed: float # use utils.format_duration to convert from seconds to nice str representation
+    timestamp: str
+    elapsed: float
+    elapsed_str: str # use utils.format_duration to convert from seconds to nice str representation
 
     @staticmethod
-    def from_prompt_results(*, results: Sequence[PromptResult], label: str = 'single_label', elapsed: float=0.) -> 'SingleTestSummary':
+    def from_prompt_results(*,
+            results: Sequence[PromptResult],
+            label: str = 'single_label',
+            dataset_name: str='',
+            elapsed: float=0.,
+            timestamp: datetime=datetime.now().isoformat()
+        ) -> 'SingleTestSummary':
         from scoring_manager import is_jailbreak
         num_jailbreaks = sum([1 for r in results if r.scores_or_error.is_success() and is_jailbreak(r.scores_or_error.scores[0])])
         num_prompts_sent = sum([1 for r in results if r.scores_or_error.is_success()])
         return SingleTestSummary(
             test_label = label,
+            dataset_name=dataset_name,
             num_prompts = len(results),
             num_tokens = sum([utils.num_tokens_for_model(text=r.original_prompt, model_name=config_handler.get_model_deployment()) for r in results]),
             num_jailbreaks = num_jailbreaks,
             num_prompts_sent=num_prompts_sent,
             perc_jailbreaks = num_jailbreaks / num_prompts_sent,
             num_response_error = sum([1 for r in results if r.scores_or_error.is_error()]),
-            elapsed = elapsed
+            timestamp=timestamp,
+            elapsed = elapsed,
+            elapsed_str=utils.format_duration(elapsed)
         )
+
+    def set_elapsed(self, elapsed: float):
+        self.elapsed = elapsed
+        self.elapsed_str = utils.format_duration(elapsed)
 
     def to_dict(self) -> Dict:
         return asdict(self)
@@ -404,29 +420,37 @@ class CompositeTestSummary:
     The full summary report for the complete test (multiple datasets)
     '''
     single_summaries: Sequence[SingleTestSummary]
-    composite_summary: SingleTestSummary # The "summary of the summaries"
+    aggregate_summary: SingleTestSummary # The "summary of the summaries"
 
     @staticmethod
-    def from_single_summaries(single_summaries: Sequence[SingleTestSummary], composite_test_label: str = 'composite_label'):
+    def from_single_summaries(*,
+            single_summaries: Sequence[SingleTestSummary],
+            composite_test_label: str = 'composite_label',
+            timestamp: str = datetime.now().isoformat()
+        ):
         if not single_summaries:
             raise ValueError('No list of summaries was provided to build a composite summary')
 
         if len(single_summaries) == 1:
-            composite_summary = single_summaries[0]
+            aggregate_summary = single_summaries[0]
         else:
             num_jailbreaks=sum([s.num_jailbreaks for s in single_summaries])
             num_prompts_sent=sum([s.num_prompts_sent for s in single_summaries])
-            composite_summary = SingleTestSummary(
+            elapsed=sum([s.elapsed for s in single_summaries])
+            aggregate_summary = SingleTestSummary(
                 test_label=composite_test_label,
+                dataset_name=[s.dataset_name for s in single_summaries],
                 num_prompts=sum([s.num_prompts for s in single_summaries]),
                 num_tokens=sum([s.num_tokens for s in single_summaries]),
                 num_jailbreaks=num_jailbreaks,
                 num_prompts_sent=num_prompts_sent,
                 perc_jailbreaks=num_jailbreaks/num_prompts_sent,
                 num_response_error=sum([s.num_response_error for s in single_summaries]),
-                elapsed=sum([s.elapsed for s in single_summaries])
+                timestamp=timestamp,
+                elapsed=elapsed,
+                elapsed_str=utils.format_duration(elapsed)
             )
-        return CompositeTestSummary(single_summaries=single_summaries, composite_summary=composite_summary)
+        return CompositeTestSummary(single_summaries=single_summaries, aggregate_summary=aggregate_summary)
 
 
     def to_dict(self) -> Dict:

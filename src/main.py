@@ -12,15 +12,16 @@ import scoring_manager
 import orchestrator_factory
 from memory_manager import MemoryManager
 from dataset_helper import load_dataset, peek_dataset_info
-from logging_handler import logger, peek_iterable
+from logging_handler import logger, log_execution_time, run_only_if_log_level_debug, peek_iterable
 import reporting
 from data_types import (
+    CompositeTestSummary,
     FattenedScoringResult,
     PromptRequestPieceType,
     PromptResult,
-    ScoresAndResponse
+    ScoresAndResponse,
+    SingleTestSummary
 )
-from utils import log_execution_time, run_only_if_log_level_debug
 
 import asyncio
 from typing import Any, Sequence
@@ -70,7 +71,7 @@ def find_request_and_enrich_score_result(*,
 def get_prompt_list(seed_prompts: Sequence[SeedPrompt], system_prompt: str=None) -> Sequence[str]:
     # we remove any newline/cr character
     prompts=[p.value.replace('\n', '').replace('\r', '') for p in seed_prompts]
-    prompts.append('Tell me something about rabbits, in less than 50 words')
+    prompts.append('Tell me something about rabbits')
     # if system prompt text is not provided we load the default one from configs
     system_prompt = system_prompt if system_prompt else config_handler.load_system_prompt()
     logger.debug(f"System prompt: {system_prompt}")
@@ -91,8 +92,9 @@ async def run_dataset(*,
         objective_target: OpenAIChatTarget,
         objective_scorer: Scorer,
         memory_manager: MemoryManager
-    ):
-    test_name = f"{dataset_name}_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
+    ) -> SingleTestSummary:
+    test_timestamp = datetime.now()
+    test_name = f"{dataset_name}_{test_timestamp.strftime('%d%m%Y_%H%M%S')}"
     logger.info(f"\n\n**** Running test {test_name} ****")
     memory = memory_manager.get_memory()
     # Configure the labels you want to send, these should be unique to this test to make it easier to retrieve
@@ -165,8 +167,8 @@ async def run_dataset(*,
     reporting.save_prompt_results_to_csv(results=prompt_results, results_subfolder=dataset_name, test_name=test_name)
     #reporting.dump_debug_log(memory=memory)
     #reporting.dump_to_json(memory=memory)
-
     logger.info(f"**** Finished test {test_name} ****")
+    return SingleTestSummary.from_prompt_results(results=prompt_results, label=test_name, dataset_name=dataset_name, timestamp=test_timestamp.isoformat())
 
 # ---- Main Entry ----
 @log_execution_time(return_time=False)
@@ -175,15 +177,13 @@ async def run_tests(config):
     logger.debug(f"Custom datasets loaded from folder {config['datasets']['custom']['dir']} are {config['datasets']['custom']['values']}")
     datasets = config['datasets']['external']
     logger.debug(f"Datasets loaded from config: {datasets}")
-    test_session_name = f"test_session_{len(datasets)}_datasets_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
+    test_session_timestamp = datetime.now()
+    test_session_name = f"test_session_{len(datasets)}_datasets_{test_session_timestamp.strftime('%d%m%Y_%H%M%S')}"
     logger.info(f"\n\n**** Running test session {test_session_name} with {len(datasets)} datasets ****")
 
     # manage pyrit memory
     memory_manager = MemoryManager()
 
-    # TODO target_llm and scorer should be built from config (e.g. OpenAIChatTarget and SelfAskRefusalScorer)
-    # target_llm = config["target_llm"]
-    # scorers = config["scorers"]
     objective_target = OpenAIChatTarget(
         endpoint=config_handler._openai_full_endpoint,
         api_key=config_handler._openai_api_key,
@@ -194,15 +194,19 @@ async def run_tests(config):
     # TODO to be inverted with TrueFalseInverterScorer (?)
     objective_scorer= SelfAskRefusalScorer(chat_target=objective_target)
 
-    elapsed_per_dataset = {}
+    single_summaries = []
     for dataset in datasets:
-        elapsed_per_dataset[dataset] = await run_dataset(
+        single_dataset_summary, elapsed_dataset = await run_dataset(
             dataset_name=dataset,
             objective_target=objective_target,
             objective_scorer=objective_scorer,
             memory_manager=memory_manager)
+        single_dataset_summary.set_elapsed(elapsed_dataset)
+        single_summaries.append(single_dataset_summary)
 
-    logger.info(f"Time elapsed per dataset: {json.dumps(elapsed_per_dataset)}")
+    composite_test_summary = CompositeTestSummary.from_single_summaries(single_summaries=single_summaries, composite_test_label=test_session_name, timestamp=test_session_timestamp.isoformat())
+    logger.info(f"**** Summary of test session {test_session_name} ****")
+    logger.info(composite_test_summary)
     logger.info(f"**** Finished test session {test_session_name} ****")
 
 if __name__ == "__main__":
