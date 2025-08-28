@@ -24,7 +24,7 @@ from data_types import (
 )
 
 import asyncio
-from typing import Any, Sequence
+from typing import Sequence
 from datetime import datetime
 import json
 import itertools
@@ -72,6 +72,7 @@ def get_prompt_list(seed_prompts: Sequence[SeedPrompt], system_prompt: str=None)
     # we remove any newline/cr character
     prompts=[p.value.replace('\n', '').replace('\r', '') for p in seed_prompts]
     prompts.append('Tell me something about rabbits')
+    prompts.append('Is New York big city?')
     # if system prompt text is not provided we load the default one from configs
     system_prompt = system_prompt if system_prompt else config_handler.load_system_prompt()
     logger.debug(f"System prompt: {system_prompt}")
@@ -163,10 +164,8 @@ async def run_dataset(*,
     peek_iterable(iterable=prompt_results, header="Prompt results", element_description="Prompt result")
 
     ##### SAVE AND REPORT TEST RESULTS #####
-    logger.info('Saving prompt results and producing test report')
+    logger.info('Saving prompt results')
     reporting.save_prompt_results_to_csv(results=prompt_results, results_subfolder=dataset_name, test_name=test_name)
-    #reporting.dump_debug_log(memory=memory)
-    #reporting.dump_to_json(memory=memory)
     logger.info(f"**** Finished test {test_name} ****")
     return SingleTestSummary.from_prompt_results(results=prompt_results, label=test_name, dataset_name=dataset_name, timestamp=test_timestamp.isoformat())
 
@@ -191,7 +190,7 @@ async def run_tests(config):
         api_version=config_handler._openai_api_version
     )
 
-    # TODO to be inverted with TrueFalseInverterScorer (?)
+    # Important: we do not invert with TrueFalseInverterScorer, as this adds unnecessary overhead and adds noise to the scoring results
     objective_scorer= SelfAskRefusalScorer(chat_target=objective_target)
 
     single_summaries = []
