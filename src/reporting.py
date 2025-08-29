@@ -1,4 +1,6 @@
 from typing import Dict, Sequence
+from openpyxl.styles import PatternFill
+from openpyxl.formatting.rule import CellIsRule
 from pyrit.memory import MemoryInterface
 
 from data_types import (
@@ -14,9 +16,14 @@ import csv
 import json
 
 # Use pathlib.Path to handle paths in an OS-independent way
-_OUTPUTS_DIR = Path(load_test_config()['output']['dir'])
-# Create output directory if it doesn't exist
-_OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUTS_DIR = Path(load_test_config()['output']['base_dir'])
+OUTPUTS_DIR.mkdir(parents=True, exist_ok=True) # Create output directory if it doesn't exist
+
+PROMPT_EVALS_DIR = OUTPUTS_DIR / load_test_config()['output']['prompt_eval_dir']
+PROMPT_EVALS_DIR.mkdir(parents=True, exist_ok=True)
+
+REPORTS_DIR = OUTPUTS_DIR / load_test_config()['output']['report_dir']
+REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 _FILE_PROMPT_RESULT_PREFIX='prompt_results'
 
@@ -48,7 +55,7 @@ def save_prompt_results_to_csv(
             if isinstance(row.get("scores"), (dict, list)):
                 row["scores"] = json.dumps(row["scores"], ensure_ascii=False)
 
-    base_dir = _OUTPUTS_DIR / results_subfolder if results_subfolder else _OUTPUTS_DIR
+    base_dir = PROMPT_EVALS_DIR / results_subfolder if results_subfolder else PROMPT_EVALS_DIR
     # Create output directory if it doesn't exist
     base_dir.mkdir(parents=True, exist_ok=True)
     file_path= base_dir / f"{_FILE_PROMPT_RESULT_PREFIX}_{test_name}.csv"
@@ -68,7 +75,7 @@ def load_results_from_csv(*,
     if f_suffix and f_suffix != '.csv':
         raise ValueError(f"{f_suffix} extension is not valid. Only results from csv files can be loaded")
     fname = file_name if f_suffix else f"{file_name}.csv"
-    out_folder_path = _OUTPUTS_DIR if not output_subfolder else _OUTPUTS_DIR / output_subfolder 
+    out_folder_path = PROMPT_EVALS_DIR if not output_subfolder else PROMPT_EVALS_DIR / output_subfolder 
     file_path= out_folder_path / fname
     
     results: Sequence[PromptResult] = []
@@ -79,4 +86,35 @@ def load_results_from_csv(*,
     return results
 
 def dump_to_json(*, memory: MemoryInterface) -> None:
-    memory.export_conversations(file_path=Path(_OUTPUTS_DIR)/"conversation.json")
+    memory.export_conversations(file_path=Path(OUTPUTS_DIR)/"conversation.json")
+
+# ---  ---
+def apply_conditional_formatting(path: str):
+    """
+    Utility for optional conditional formatting
+    Apply conditional formatting to perc_jailbreaks columns in an Excel file.
+    """
+    from openpyxl import load_workbook
+    wb = load_workbook(path)
+
+    for sheet in wb.sheetnames:
+        ws = wb[sheet]
+        # Find column of perc_jailbreaks (header row is 1)
+        for col in range(1, ws.max_column + 1):
+            if ws.cell(row=1, column=col).value == "perc_jailbreaks":
+                col_letter = ws.cell(row=1, column=col).column_letter
+                cell_range = f"{col_letter}2:{col_letter}{ws.max_row}"
+
+                # >1% orange
+                ws.conditional_formatting.add(
+                    cell_range,
+                    CellIsRule(operator="greaterThan", formula=["0.01"],
+                               fill=PatternFill(start_color="FFA500", end_color="FFA500", fill_type="solid"))
+                )
+                # >2% red
+                ws.conditional_formatting.add(
+                    cell_range,
+                    CellIsRule(operator="greaterThan", formula=["0.02"],
+                               fill=PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid"))
+                )
+    wb.save(path)

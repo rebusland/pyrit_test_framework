@@ -16,7 +16,9 @@ system_prompt:
  value: children_safe_prompt_eng.txt
 
 output:
-  dir: "results"
+  base_dir: "results"
+  prompt_eval_dir: "prompt_evaluations"
+  report_dir: "reports"
 
 logging:
   level: "DEBUG"

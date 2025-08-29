@@ -204,6 +204,7 @@ async def run_tests(config):
         single_summaries.append(single_dataset_summary)
 
     composite_test_summary = CompositeTestSummary.from_single_summaries(single_summaries=single_summaries, composite_test_label=test_session_name, timestamp=test_session_timestamp.isoformat())
+    composite_test_summary.save_to_excel()
     logger.info(f"**** Summary of test session {test_session_name} ****")
     logger.info(composite_test_summary)
     logger.info(f"**** Finished test session {test_session_name} ****")

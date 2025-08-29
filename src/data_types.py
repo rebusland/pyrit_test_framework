@@ -1,3 +1,6 @@
+from pathlib import Path
+import pandas as pd
+
 from pyrit.models import (
     PromptRequestPiece,
     Score,
@@ -414,6 +417,14 @@ class SingleTestSummary:
     def __str__(self):
         return self.to_json()
 
+    def to_dataframe(self) -> pd.DataFrame:
+        """Return a 1-row DataFrame for this summary."""
+        return pd.DataFrame([self.to_dict()])
+
+    def to_csv(self, path: str):
+        """Save this summary to CSV."""
+        self.to_dataframe().to_csv(path, index=False)
+
 @dataclass
 class CompositeTestSummary:
     '''
@@ -469,3 +480,18 @@ class CompositeTestSummary:
 
     def __str__(self):
         return self.to_json()
+
+    from reporting import REPORTS_DIR
+    def save_to_excel(self, file_name: str = None, base_path: Path = REPORTS_DIR):
+        """Save all summaries into an Excel file."""
+        df_all = pd.concat([s.to_dataframe() for s in self.single_summaries], ignore_index=True)
+        df_agg = self.aggregate_summary.to_dataframe()
+
+        file_name = file_name or f"{self.aggregate_summary.test_label}.xlsx"
+        path = base_path / file_name
+        with pd.ExcelWriter(path, engine="openpyxl") as writer:
+            df_all.to_excel(writer, index=False, sheet_name="datasets")
+            df_agg.to_excel(writer, index=False, sheet_name="aggregate")
+
+        # return path so it can be post-processed
+        return path

@@ -4,3 +4,5 @@ openai
 pyyaml
 python-dotenv
 tiktoken
+pandas
+openpyxl

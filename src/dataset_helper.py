@@ -85,6 +85,9 @@ _datasets = {
     "bias": (False, lambda: red_team_social_bias_dataset.fetch_red_team_social_bias_dataset()),
 }
 
+# TODO manage lazy loader (and add to _datasets dict) also for custom datasets: i.e. get all dataset files saved
+# in the dataset/custom folder and prepare the loader fetchers (should_cache flag set to true)
+
 lazy_dataset_loader = LazyLoader(_datasets)
 
 def load_dataset(*, dataset_name: str) -> SeedPromptDataset:
