@@ -1,4 +1,4 @@
-dataset_name: pyrit_test_framework_dataset
+dataset_name: Custom Prompts Children Ferrero
 harm_categories: child_safety
 source: pyrit_test_framework
 groups: Ferrero Toys Red Team

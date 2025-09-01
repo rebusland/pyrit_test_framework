@@ -7,9 +7,8 @@ datasets:
     #- librai
     #- bias
   custom:
-   dir: "dataset/custom"
-   values:
-    #- prompts.yaml
+   dir: "dataset/custom/active"
+   enabled: True
 
 system_prompt:
  dir: "config/system_prompts"

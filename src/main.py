@@ -11,7 +11,12 @@ import config_handler
 import scoring_manager
 import orchestrator_factory
 from memory_manager import MemoryManager
-from dataset_helper import load_dataset, peek_dataset_info
+from dataset_helper import (
+    initialize_dataset_loader,
+    load_dataset,
+    peek_dataset_info,
+    list_available_datasets
+)
 from logging_handler import logger, log_execution_time, run_only_if_log_level_debug, peek_iterable
 import reporting
 from data_types import (
@@ -125,7 +130,7 @@ async def run_dataset(*,
     # TODO among metadata trace a correspondance between seed_id (should be a static id for the prompt in the dataset)
     # and the sha of the prompt, so that we can then match the response and the prompt to the original seed_id
     prompts_metadata_for_orchestrator = {
-        'dataset_name': dataset.name,
+        'dataset_name': dataset.dataset_name,
         'dataset_harm_categories': dataset.harm_categories
     }
     responses = await orchestrator.send_prompts_async(
@@ -172,13 +177,21 @@ async def run_dataset(*,
 # ---- Main Entry ----
 @log_execution_time(return_time=False)
 async def run_tests(config):
-    # TODO should handle both external and custom dataset
-    logger.debug(f"Custom datasets loaded from folder {config['datasets']['custom']['dir']} are {config['datasets']['custom']['values']}")
-    datasets = config['datasets']['external']
-    logger.debug(f"Datasets loaded from config: {datasets}")
+    custom_datasets = initialize_dataset_loader(config)
+    available_datasets = list_available_datasets()
+    logger.debug(f"Available datasets: {available_datasets}")
+
+    # Use datasets listed in config, both external and custom
+    enabled_datasets = []
+    if "external" in config["datasets"] and config["datasets"]["external"]:
+        enabled_datasets += config["datasets"]["external"]
+    if "custom" in config["datasets"] and config["datasets"]["custom"]["enabled"]:
+        enabled_datasets += custom_datasets
+    logger.debug(f"Datasets enabled for the test: {enabled_datasets}")
+
     test_session_timestamp = datetime.now()
-    test_session_name = f"test_session_{len(datasets)}_datasets_{test_session_timestamp.strftime('%d%m%Y_%H%M%S')}"
-    logger.info(f"\n\n**** Running test session {test_session_name} with {len(datasets)} datasets ****")
+    test_session_name = f"test_session_{len(enabled_datasets)}_datasets_{test_session_timestamp.strftime('%d%m%Y_%H%M%S')}"
+    logger.info(f"\n\n**** Running test session {test_session_name} with {len(enabled_datasets)} datasets ****")
 
     # manage pyrit memory
     memory_manager = MemoryManager()
@@ -194,9 +207,9 @@ async def run_tests(config):
     objective_scorer= SelfAskRefusalScorer(chat_target=objective_target)
 
     single_summaries = []
-    for dataset in datasets:
+    for dat_name in enabled_datasets:
         single_dataset_summary, elapsed_dataset = await run_dataset(
-            dataset_name=dataset,
+            dataset_name=dat_name,
             objective_target=objective_target,
             objective_scorer=objective_scorer,
             memory_manager=memory_manager)
