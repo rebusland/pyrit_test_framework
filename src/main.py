@@ -71,8 +71,8 @@ def find_request_and_enrich_score_result(*,
 def get_prompt_list(seed_prompts: Sequence[SeedPrompt], system_prompt: str=None) -> Sequence[str]:
     # we remove any newline/cr character
     prompts=[p.value.replace('\n', '').replace('\r', '') for p in seed_prompts]
-    prompts.append('Tell me something about rabbits')
-    prompts.append('Is New York big city?')
+    #prompts.append('Tell me something about rabbits')
+    #prompts.append('Is New York big city?')
     # if system prompt text is not provided we load the default one from configs
     system_prompt = system_prompt if system_prompt else config_handler.load_system_prompt()
     logger.debug(f"System prompt: {system_prompt}")
@@ -110,7 +110,7 @@ async def run_dataset(*,
     dataset = load_dataset(dataset_name=dataset_name)
     peek_dataset_info(dataset=dataset)
 
-    seed_prompts = dataset.prompts[:2]
+    seed_prompts = dataset.prompts
     logger.info(f"\n\n\nPrompt dataset {dataset_name} loaded, preparing {len(seed_prompts)} prompts to send\n")
     await memory.add_seed_prompts_to_memory_async(prompts=seed_prompts, added_by="pyrit_test_framework")
     prompt_list = get_prompt_list(seed_prompts=seed_prompts)
